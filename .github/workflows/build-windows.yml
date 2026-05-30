@@ -1,0 +1,141 @@
+name: build-windows
+
+on:
+  push:
+    tags: ['v0.*']  # Python v0.x only — v1.x handled by rust-release.yml
+  pull_request:
+    paths:
+      - 'src/yazses/platform/windows/**'
+      - 'src/yazses/__main__.py'
+      - 'src/yazses/tray/**'
+      - 'packaging/windows/**'
+      - 'scripts/build-windows.ps1'
+      - '.github/workflows/build-windows.yml'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # needed by SignPath's OIDC-based authentication
+  contents: write   # needed by softprops/action-gh-release to attach .exe
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    env:
+      # SignPath.io signing (free for OSS). All four must be set for the
+      # sign step to fire; otherwise the workflow ships an unsigned dev
+      # preview (the v0 default).
+      #   SIGNPATH_API_TOKEN          — API token from SignPath account
+      #   SIGNPATH_ORGANIZATION_ID    — UUID of your SignPath organisation
+      #   SIGNPATH_PROJECT_SLUG       — e.g. "yazses"
+      #   SIGNPATH_SIGNING_POLICY     — e.g. "release-signing"
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+      SIGNPATH_SIGNING_POLICY: ${{ secrets.SIGNPATH_SIGNING_POLICY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.5.x'
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Confirm Inno Setup is available
+        shell: pwsh
+        run: |
+          $cands = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )
+          $iscc = $cands | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            Write-Host "Inno Setup not preinstalled; installing via choco"
+            choco install innosetup -y --no-progress
+          } else {
+            Write-Host "Found Inno Setup at $iscc"
+          }
+
+      - name: Detect signing presence
+        id: sign
+        shell: pwsh
+        run: |
+          if ($env:SIGNPATH_API_TOKEN -and $env:SIGNPATH_ORGANIZATION_ID -and $env:SIGNPATH_PROJECT_SLUG -and $env:SIGNPATH_SIGNING_POLICY) {
+            Write-Host "Signing via SignPath will run."
+            echo "sign=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "SignPath secrets not all present; producing unsigned dev preview."
+            echo "sign=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+
+      - name: Locate .exe
+        id: locate
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "dist\YazSes-*-windows-x64.exe" | Select-Object -First 1
+          if (-not $exe) { throw "No installer produced" }
+          echo "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+
+      # Upload the unsigned .exe to SignPath, which signs it and returns the
+      # signed binary as a separate artefact named "$name.signed".
+      - name: Upload to SignPath for signing
+        if: steps.sign.outputs.sign == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-installer
+          path: ${{ steps.locate.outputs.path }}
+          if-no-files-found: error
+
+      - name: Sign with SignPath
+        if: steps.sign.outputs.sign == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY }}
+          github-artifact-id: ${{ github.run_id }}
+          wait-for-completion: true
+          output-artifact-directory: dist-signed
+          parameters: |
+            Version: ${{ github.ref_name }}
+
+      - name: Replace unsigned installer with signed one
+        if: steps.sign.outputs.sign == 'true'
+        shell: pwsh
+        run: |
+          $signed = Get-ChildItem "dist-signed\*.exe" | Select-Object -First 1
+          if (-not $signed) { throw "SignPath returned no signed exe" }
+          Copy-Item -Force $signed.FullName "${{ steps.locate.outputs.path }}"
+          Write-Host "Replaced unsigned installer with signed version: $($signed.Name)"
+          Get-AuthenticodeSignature "${{ steps.locate.outputs.path }}" | Format-List
+
+      - name: Show build artefacts
+        shell: pwsh
+        run: Get-ChildItem dist | Format-Table Name, Length, LastWriteTime
+
+      - name: Upload installer (signed if applicable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: yazses-windows-${{ steps.sign.outputs.sign == 'true' && 'signed' || 'unsigned' }}-${{ github.sha }}
+          path: dist/YazSes-*-windows-x64.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach to release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/YazSes-*-windows-x64.exe
+          fail_on_unmatched_files: true

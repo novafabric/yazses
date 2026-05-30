@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+case "$1" in
+    remove|upgrade|deconfigure)
+        CALLER="${SUDO_USER:-}"
+        if [ -n "$CALLER" ] && [ "$CALLER" != "root" ]; then
+            su - "$CALLER" -c \
+                "systemctl --user disable --now yazses.service 2>/dev/null || true"
+        fi
+        ;;
+esac
+#DEBHELPER#

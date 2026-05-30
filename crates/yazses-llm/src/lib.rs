@@ -1,0 +1,21 @@
+pub mod llama_backend;
+pub mod mock;
+pub mod ollama_backend;
+pub mod openai_backend;
+pub mod protocol;
+pub mod cleanup;
+pub mod dictation_commands;
+pub mod mechanics;
+pub mod tools;
+pub mod vocabulary;
+
+pub use llama_backend::LlamaCppBackend;
+pub use mock::MockLLMBackend;
+pub use ollama_backend::OllamaBackend;
+pub use openai_backend::OpenAICompatibleBackend;
+pub use protocol::{LLMBackend, LLMOutput, LLMRequest, Message, Role, Tier, ToolCall};
+pub use cleanup::{CleanupConfig, CleanupEngine, CleanupMode};
+pub use dictation_commands::apply_dictation_commands;
+pub use mechanics::polish_mechanics;
+pub use tools::{build_gbnf_grammar, default_tools, ToolDefinition, ToolRegistry};
+pub use vocabulary::Vocabulary;

@@ -1,0 +1,31 @@
+[package]
+name = "yazses-audio"
+description = "Audio capture (cpal) and RMS VAD for YazSes v1.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+silero = ["dep:ort", "dep:ndarray"]
+
+[dependencies]
+cpal = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Optional ONNX Runtime for Silero VAD v4
+[dependencies.ort]
+version = "2.0.0-rc.12"
+optional = true
+default-features = false
+features = ["load-dynamic"]
+
+[dependencies.ndarray]
+version = "0.17"
+optional = true

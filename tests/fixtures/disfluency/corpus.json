@@ -1,0 +1,162 @@
+[
+  {
+    "input": "um hello world",
+    "expected": "hello world",
+    "notes": "simple filler um removed at start"
+  },
+  {
+    "input": "you know this is great",
+    "expected": "this is great",
+    "notes": "multi-word filler you know removed"
+  },
+  {
+    "input": "Hello UM this is Python",
+    "expected": "Hello UM this is Python",
+    "notes": "proper noun protection: UM is uppercase, must not be removed"
+  },
+  {
+    "input": "call the function_name here",
+    "expected": "call the function_name here",
+    "notes": "code identifier protection: function_name contains underscore, must not be removed"
+  },
+  {
+    "input": "the the the function",
+    "expected": "the the the function",
+    "notes": "2-gram dedup: three identical words do not form consecutive identical 2-grams"
+  },
+  {
+    "input": "hello world hello world great",
+    "expected": "hello world great",
+    "notes": "2-gram dedup: consecutive identical bigram hello world removed"
+  },
+  {
+    "input": "I want to open the file delete that I want to save",
+    "expected": "I want to save",
+    "notes": "self-correction with delete that trigger, no sentence boundary"
+  },
+  {
+    "input": "First sentence. I was wrong scratch that I am correct",
+    "expected": "First sentence. I am correct",
+    "notes": "self-correction with sentence boundary; keeps text after boundary and after trigger"
+  },
+  {
+    "input": "",
+    "expected": "",
+    "notes": "empty input passes through unchanged"
+  },
+  {
+    "input": "Hello world",
+    "expected": "Hello world",
+    "notes": "no fillers present; text unchanged"
+  },
+  {
+    "input": "um so I uh need to basically delete last line",
+    "expected": "so I need to delete last line",
+    "notes": "mixed fillers: um removed, uh removed, basically removed; so is not a standalone filler"
+  },
+  {
+    "input": "let me think hmm",
+    "expected": "let me think",
+    "notes": "filler at end of sentence removed"
+  },
+  {
+    "input": "I need uh to check this",
+    "expected": "I need to check this",
+    "notes": "uh removed mid-sentence"
+  },
+  {
+    "input": "okay so let us begin",
+    "expected": "let us begin",
+    "notes": "multi-word filler okay so removed from start"
+  },
+  {
+    "input": "I was wrong scratch that I am correct",
+    "expected": "I am correct",
+    "notes": "self-correction scratch that with no sentence boundary; removes from start through trigger"
+  },
+  {
+    "input": "i mean this is good",
+    "expected": "this is good",
+    "notes": "multi-word filler i mean removed"
+  },
+  {
+    "input": "err I forgot the name",
+    "expected": "I forgot the name",
+    "notes": "err filler removed from start"
+  },
+  {
+    "input": "I actually think this is good",
+    "expected": "I think this is good",
+    "notes": "actually filler removed mid-sentence"
+  },
+  {
+    "input": "I literally just said that",
+    "expected": "I just said that",
+    "notes": "literally filler removed mid-sentence"
+  },
+  {
+    "input": "it is sort of complicated",
+    "expected": "it is complicated",
+    "notes": "multi-word filler sort of removed"
+  },
+  {
+    "input": "it is kind of hard",
+    "expected": "it is hard",
+    "notes": "multi-word filler kind of removed"
+  },
+  {
+    "input": "so um we need to fix this",
+    "expected": "we need to fix this",
+    "notes": "multi-word filler so um removed from start"
+  },
+  {
+    "input": "so uh let me think",
+    "expected": "let me think",
+    "notes": "multi-word filler so uh removed from start"
+  },
+  {
+    "input": "it is like really hard",
+    "expected": "it is really hard",
+    "notes": "like filler removed mid-sentence"
+  },
+  {
+    "input": "right we should do this",
+    "expected": "we should do this",
+    "notes": "right filler removed from start"
+  },
+  {
+    "input": "um uh so we need this",
+    "expected": "so we need this",
+    "notes": "multiple consecutive fillers um and uh removed; so is not a standalone filler"
+  },
+  {
+    "input": "open the file forget that save the file",
+    "expected": "save the file",
+    "notes": "self-correction forget that trigger with no sentence boundary"
+  },
+  {
+    "input": "I want to delete never mind I want to save",
+    "expected": "I want to save",
+    "notes": "self-correction never mind trigger with no sentence boundary"
+  },
+  {
+    "input": "please do this strike that please do that",
+    "expected": "please do that",
+    "notes": "self-correction strike that trigger with no sentence boundary"
+  },
+  {
+    "input": "the dog the dog ran fast",
+    "expected": "the dog ran fast",
+    "notes": "2-gram dedup: consecutive identical bigram the dog deduplicated"
+  },
+  {
+    "input": "no wait I should reconsider",
+    "expected": "I should reconsider",
+    "notes": "self-correction no wait trigger at start with no sentence boundary"
+  },
+  {
+    "input": "is is is this correct",
+    "expected": "is is is this correct",
+    "notes": "three identical single words do not form consecutive identical 2-grams; unchanged"
+  }
+]

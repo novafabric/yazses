@@ -1,0 +1,16 @@
+[Unit]
+Description=YazSes voice dictation daemon
+Documentation=https://github.com/novafabric/yazses
+After=graphical-session.target sound.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/yazses-daemon
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical-session.target

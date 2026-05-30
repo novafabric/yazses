@@ -1,0 +1,59 @@
+name: yazses
+base: core24
+version: "0.4.0"
+summary: Local, offline voice dictation for Linux
+description: |
+  Hold Space anywhere on your desktop, speak, release — the transcribed
+  text appears in whatever app is focused. No cloud, no GPU required.
+  Powered by faster-whisper (CPU/int8, no GPU needed).
+
+  IMPORTANT: Requires classic confinement for /dev/input access (keyboard events).
+  Install with: sudo snap install yazses --classic
+
+title: YazSes
+contact: mohsen.seyedkazemi@gmail.com
+license: Apache-2.0
+website: https://novafabric.ai
+source-code: https://github.com/novafabric/yazses
+issues: https://github.com/novafabric/yazses/issues
+
+grade: stable
+confinement: classic
+
+apps:
+  yazses:
+    command: bin/yazses-wrapper
+  yazses-daemon:
+    command: bin/yazses-daemon-wrapper
+  yazses-tray:
+    command: bin/yazses-tray-wrapper
+
+parts:
+  yazses:
+    plugin: python
+    source: .
+    build-packages:
+      - python3-dev
+    stage-packages:
+      - libportaudio2
+      - python3.12
+      - python3.12-minimal
+      - libpython3.12-minimal
+      - libpython3.12-stdlib
+      - python3-pip-whl
+    python-packages:
+      - pip
+    # snapcraft's python plugin runs a fix-python-shebang helper that searches
+    # for /usr/bin/python3.12 in the staged payload. Stage-packages installs
+    # python3.12 to /usr/bin, but on some core24 versions the binary lands in
+    # an unexpected location; the symlink below is a defensive belt-and-braces
+    # so the helper finds it.
+    override-build: |
+      craftctl default
+      mkdir -p "$CRAFT_PART_INSTALL/usr/bin"
+      if [ ! -e "$CRAFT_PART_INSTALL/usr/bin/python3.12" ]; then
+        ln -sf /usr/bin/python3.12 "$CRAFT_PART_INSTALL/usr/bin/python3.12"
+      fi
+      install -Dm755 snap/local/yazses-wrapper "$CRAFT_PART_INSTALL/bin/yazses-wrapper"
+      install -Dm755 snap/local/yazses-daemon-wrapper "$CRAFT_PART_INSTALL/bin/yazses-daemon-wrapper"
+      install -Dm755 snap/local/yazses-tray-wrapper "$CRAFT_PART_INSTALL/bin/yazses-tray-wrapper"

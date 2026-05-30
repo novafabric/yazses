@@ -1,0 +1,23 @@
+# examples/config.example.toml
+# Copy to ~/.config/yazses/config.toml and edit as needed.
+
+[stt]
+model = "tiny.en"         # tiny.en (fast) | base.en (accurate)
+device = "cpu"
+compute_type = "int8"
+
+[hotkey]
+key = "space"
+hold_threshold_ms = 500
+
+[audio]
+sample_rate = 16000
+channels = 1
+max_record_seconds = 90
+
+[injection]
+backend = "auto"           # auto | xdotool | ydotool | wtype | clipboard
+fallback_to_clipboard = true
+
+[general]
+log_level = "INFO"

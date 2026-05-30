@@ -1,0 +1,51 @@
+name: Launchpad PPA
+
+on:
+  push:
+    tags:
+      - "v0.*"  # Python v0.x only — v1.x handled by rust-release.yml
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  upload-ppa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Debian packaging tools
+        run: |
+          sudo apt-get install -y -q devscripts debhelper dput gpg
+
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.PPA_GPG_PRIVATE_KEY }}
+          passphrase: ""
+          git_user_signingkey: true
+
+      - name: Configure dput
+        run: |
+          cat > ~/.dput.cf <<'EOF'
+          [yazses-ppa]
+          fqdn = ppa.launchpad.net
+          method = ftp
+          incoming = ~novafabric/ubuntu/yazses/
+          login = anonymous
+          allow_unsigned_uploads = 0
+          EOF
+
+      - name: Upload to PPA
+        env:
+          DEBEMAIL: mohsen.seyedkazemi@gmail.com
+          DEBFULLNAME: Mohsen Seyedkazemi Moghadam
+          GPG_KEY_ID: ${{ secrets.PPA_GPG_KEY_ID }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          chmod +x scripts/upload-ppa.sh
+          bash scripts/upload-ppa.sh \
+            "$VERSION" \
+            "$GPG_KEY_ID" \
+            "yazses-ppa"

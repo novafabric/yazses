@@ -1,0 +1,100 @@
+"""Windows system-tray UI built on pystray.
+
+Like the macOS tray, this runs in its own process and talks to the daemon
+over the named-pipe IPC. The tray's icon updates reflect daemon state pushed
+by the cross-platform tray entry script (``yazses.tray.app``).
+"""
+
+from __future__ import annotations
+
+import logging
+import threading
+from collections.abc import Callable
+
+from yazses.platform.base import TrayModel, TrayState
+
+log = logging.getLogger(__name__)
+
+
+_GLYPH_COLOR = {
+    TrayState.LOADING: (170, 170, 170, 255),     # light grey, "still warming up"
+    TrayState.IDLE: (40, 130, 200, 255),         # blue
+    TrayState.RECORDING: (220, 60, 60, 255),     # red
+    TrayState.TRANSCRIBING: (255, 180, 30, 255), # amber
+    TrayState.INJECTING: (60, 180, 90, 255),     # green
+    TrayState.PAUSED: (140, 140, 140, 255),      # grey
+    TrayState.ERROR: (200, 40, 80, 255),         # magenta
+}
+
+
+def _make_icon(state: TrayState):
+    from PIL import Image, ImageDraw  # type: ignore[import-not-found]
+
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    color = _GLYPH_COLOR.get(state, _GLYPH_COLOR[TrayState.IDLE])
+    # Solid filled circle. Simple, recognisable at 16×16.
+    draw.ellipse((4, 4, 60, 60), fill=color)
+    return img
+
+
+class WindowsTray:
+    """TrayBackend implementation for Windows, backed by pystray."""
+
+    def __init__(self) -> None:
+        self._icon = None
+        self._on_quit: Callable[[], None] | None = None
+        self._lock = threading.Lock()
+
+    def run(self, on_quit: Callable[[], None]) -> None:
+        try:
+            import pystray  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise RuntimeError(
+                "pystray is not installed. Install with `pip install pystray Pillow` "
+                "or run the daemon without the tray."
+            ) from exc
+
+        self._on_quit = on_quit
+
+        def _quit_clicked(icon, _item) -> None:  # noqa: ANN001
+            icon.stop()
+
+        menu = pystray.Menu(
+            pystray.MenuItem("YazSes", None, enabled=False),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Pause hotkey", None, enabled=False),
+            pystray.MenuItem("Help", None, enabled=False),
+            pystray.MenuItem("Quit", _quit_clicked),
+        )
+
+        self._icon = pystray.Icon(
+            "yazses",
+            _make_icon(TrayState.IDLE),
+            "YazSes",
+            menu,
+        )
+        log.info("Launching pystray tray (blocks the calling thread)")
+        try:
+            self._icon.run()
+        finally:
+            if self._on_quit is not None:
+                self._on_quit()
+
+    def set_state(self, model: TrayModel) -> None:
+        with self._lock:
+            if self._icon is None:
+                return
+            try:
+                self._icon.icon = _make_icon(model.state)
+                self._icon.title = f"YazSes — {model.state.value}"
+            except Exception:
+                log.exception("Tray icon update failed")
+
+    def stop(self) -> None:
+        with self._lock:
+            if self._icon is not None:
+                try:
+                    self._icon.stop()
+                except Exception:
+                    log.exception("Tray stop raised")

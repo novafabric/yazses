@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+case "$1" in
+    configure)
+        CALLER="${SUDO_USER:-}"
+        if [ -n "$CALLER" ] && [ "$CALLER" != "root" ]; then
+            su - "$CALLER" -c \
+                "pipx install yazses 2>/dev/null || pipx upgrade yazses"
+            su - "$CALLER" -c "pipx ensurepath"
+        fi
+        echo ""
+        echo "YazSes installed. Complete setup (once per user):"
+        echo "  sudo usermod -aG input \$USER   # keyboard access"
+        echo "  systemctl --user enable --now yazses.service"
+        ;;
+esac
+#DEBHELPER#

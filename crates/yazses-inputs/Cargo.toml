@@ -1,0 +1,30 @@
+[package]
+name = "yazses-inputs"
+description = "InputBackend Protocol — keyboard hold, EMG YESP, and future silent-speech modalities (adr-005)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+tokio-stream = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13"
+
+[dependencies.serialport]
+version = "4"
+optional = true
+
+[features]
+default = []
+emg = ["dep:serialport"]

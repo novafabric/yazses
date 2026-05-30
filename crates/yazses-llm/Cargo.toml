@@ -1,0 +1,35 @@
+[package]
+name = "yazses-llm"
+description = "LLM backends — llama.cpp (default) + Ollama (optional) + grammar-constrained tool calls (adr-003, adr-004)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+
+# Optional: llama.cpp via llama-cpp-2 (requires cmake + C++ at build time)
+[dependencies.llama-cpp-2]
+version = "0.1"
+optional = true
+
+# Optional: Ollama HTTP client (requires a running Ollama daemon)
+[dependencies.reqwest]
+version = "0.13"
+features = ["json"]
+optional = true
+
+[features]
+default = []
+llama-cpp          = ["dep:llama-cpp-2"]
+ollama             = ["dep:reqwest"]
+openai-compatible  = ["dep:reqwest"]

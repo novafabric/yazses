@@ -1,0 +1,39 @@
+[package]
+name = "yazses-cli"
+description = "YazSes v1.0 CLI — `yazses` binary preserving all v0.4 subcommands (adr-010)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "yazses"
+path = "src/main.rs"
+
+[features]
+ollama    = ["yazses-core/ollama"]
+llama-cpp = ["yazses-core/llama-cpp"]
+moonshine = ["yazses-core/moonshine"]
+whisper   = ["yazses-core/whisper"]
+sqlcipher = ["yazses-core/sqlcipher"]
+
+[dependencies]
+yazses-ipc  = { path = "../yazses-ipc" }
+yazses-core = { path = "../yazses-core" }
+cpal = { workspace = true }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dependencies.reqwest]
+version = "0.13"
+features = ["blocking", "stream", "rustls"]
+default-features = false
+
+[dependencies.dirs]
+version = "6"

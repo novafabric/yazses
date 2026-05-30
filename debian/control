@@ -1,0 +1,21 @@
+Source: yazses
+Section: utils
+Priority: optional
+Maintainer: Mohsen Seyedkazemi Moghadam <mohsen.seyedkazemi@gmail.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/novafabric/yazses
+Vcs-Git: https://github.com/novafabric/yazses.git
+Vcs-Browser: https://github.com/novafabric/yazses
+
+Package: yazses
+Architecture: all
+Depends: ${misc:Depends}, python3 (>= 3.11), libportaudio2, pipx,
+ xdotool | ydotool | wtype, xclip | wl-clipboard
+Description: Local, offline voice dictation daemon for Linux
+ Hold Space anywhere on your desktop, speak, then release Space.
+ The transcribed text is injected into whatever application is focused.
+ No internet required after the initial model download. CPU-only inference.
+ .
+ Powered by faster-whisper (CTranslate2 backend).

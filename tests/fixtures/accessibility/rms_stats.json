@@ -1,0 +1,5 @@
+{
+    "expected_vad_threshold_range": [0.001, 0.05],
+    "expected_min_silence_ms_range": [500, 2000],
+    "num_utterances": 20
+}

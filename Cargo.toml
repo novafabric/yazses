@@ -1,0 +1,64 @@
+[workspace]
+members = [
+    "crates/yazses-ipc",
+    "crates/yazses-core",
+    "crates/yazses-cli",
+    "crates/yazses-inputs",
+    "crates/yazses-audio",
+    "crates/yazses-stt",
+    "crates/yazses-llm",
+    "crates/yazses-editors",
+    "crates/yazses-memory",
+    "crates/yazses-atspi",
+    "crates/yazses-nvda",
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0-dev.1"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0"
+authors = ["Mohsen Seyedkazemi Ardebili"]
+repository = "https://github.com/mohsen-seyedkazemi/yazses"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "signal", "time", "fs", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+async-trait = "0.1"
+tokio-stream = "0.1"
+cpal = "0.17"
+
+# ── cargo-dist configuration (adr-008) ───────────────────────────────────────
+[workspace.metadata.dist]
+cargo-dist-version = "0.28.0"
+# Binaries to include in release archives.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+installers = ["shell", "powershell", "homebrew"]
+tap = "novafabric/homebrew-tap"
+publish-jobs = ["homebrew"]
+# Create GitHub Releases automatically on v* tags.
+create-release = true
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true

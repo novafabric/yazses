@@ -1,0 +1,74 @@
+name: Snap
+
+on:
+  push:
+    tags:
+      - "v0.*"  # Python v0.x only — v1.x handled by rust-release.yml
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (without 'v' prefix). Defaults to current snapcraft.yaml value."
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  snap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF_NAME#v}
+          else
+            VERSION=$(grep -E '^version:' snap/snapcraft.yaml | head -1 | sed -E 's/version:\s*"([^"]+)".*/\1/')
+          fi
+          sed -i "s/^version:.*/version: \"$VERSION\"/" snap/snapcraft.yaml
+          echo "Building snap version $VERSION"
+
+      - name: Build snap
+        uses: snapcore/action-build@v1
+        id: snap-build
+        # Default mode uses an LXD container, which has root and can refresh
+        # the apt cache. --destructive-mode runs as the runner user without
+        # root, which leaves the package list stale and triggers 404s when
+        # Ubuntu rolls forward.
+
+      - name: Show built artefact
+        run: ls -lh "${{ steps.snap-build.outputs.snap }}"
+
+      - name: Upload .snap as workflow artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yazses-snap-${{ github.sha }}
+          path: ${{ steps.snap-build.outputs.snap }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Check Snap Store credentials presence
+        id: check-snap-creds
+        env:
+          CREDS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [[ -z "${CREDS}" ]]; then
+            echo "Snap Store credentials not configured; skipping publish."
+            echo "have_creds=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "have_creds=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Publish to Snap Store
+        if: steps.check-snap-creds.outputs.have_creds == 'true'
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.snap-build.outputs.snap }}
+          release: stable

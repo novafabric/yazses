@@ -1,0 +1,12 @@
+[package]
+name = "yazses-atspi"
+description = "Linux AT-SPI2 / speech-dispatcher screen-reader announcer for YazSes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+tracing = { workspace = true }

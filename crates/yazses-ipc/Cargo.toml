@@ -1,0 +1,16 @@
+[package]
+name = "yazses-ipc"
+description = "JSON-RPC 2.0 over Unix socket — preserved v0.4 wire contract (adr-010)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true

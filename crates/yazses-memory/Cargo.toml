@@ -1,0 +1,53 @@
+[package]
+name = "yazses-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+
+rusqlite   = { version = "0.39" }
+# sqlite-vec 0.1.10-alpha.4 has a packaging bug (missing sqlite-vec-diskann.c).
+# Enable the `vec0` feature once the upstream crate is fixed.
+sqlite-vec = { version = "0.1.10-alpha.4", optional = true }
+
+# Key derivation (PBKDF2-HMAC-SHA256, adr-007)
+pbkdf2    = "0.13"
+sha2      = "0.11"
+getrandom = "0.4"
+hex       = "0.4"
+
+# Optional: ONNX Runtime for real BGE-small-en embeddings
+ort     = { version = "2.0.0-rc.12", optional = true, default-features = false, features = ["load-dynamic"] }
+ndarray = { version = "0.17",        optional = true }
+
+[dependencies.tokenizers]
+version = "0.21"
+default-features = false
+features = ["onig"]
+optional = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# default: plain bundled SQLite — fast compile, no system deps
+default = ["bundled"]
+bundled  = ["rusqlite/bundled"]
+
+# Production: AES-256 encrypted storage (compiles SQLCipher + vendored OpenSSL)
+sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+
+# BGE-small-en ONNX embeddings via ONNX Runtime
+onnx = ["dep:ort", "dep:ndarray", "dep:tokenizers"]
+
+# vec0 virtual table (requires sqlite-vec packaging fix; default: pure-SQL KNN)
+vec0 = ["dep:sqlite-vec"]

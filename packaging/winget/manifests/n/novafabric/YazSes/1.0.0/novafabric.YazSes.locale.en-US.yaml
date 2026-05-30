@@ -1,0 +1,41 @@
+PackageIdentifier: novafabric.YazSes
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: novafabric
+PublisherUrl: https://github.com/novafabric
+Author: Mohsen Seyedkazemi Ardebili
+PackageName: YazSes
+PackageUrl: https://github.com/novafabric/yazses
+License: Apache-2.0
+LicenseUrl: https://github.com/novafabric/yazses/blob/main/LICENSE
+Copyright: Copyright 2026 Mohsen Seyedkazemi Ardebili
+ShortDescription: Local, offline, hold-to-talk voice dictation — agentic OS layer (Rust core)
+Description: |-
+  YazSes v1.0 is a cross-platform, offline hold-to-talk voice dictation daemon
+  built on a Rust core. Hold a key, speak, release — text appears in any focused
+  window. No cloud, no GPU, no subscription.
+
+  v1.0 ships the full agentic OS layer: LLM tool dispatch via llama.cpp/MLX,
+  personal encrypted memory (sqlite-vec), editor context injection for Neovim
+  and VSCode via LSP bridges, multi-backend STT routing (faster-whisper / whisper.cpp),
+  AT-SPI and NVDA screen-reader integration, and a zero-telemetry privacy model.
+  All processing is on-device.
+Moniker: yazses
+Tags:
+  - voice
+  - dictation
+  - speech-to-text
+  - accessibility
+  - productivity
+  - offline
+  - privacy
+  - rust
+  - agentic
+ReleaseNotes: |-
+  v1.0.0 — stable Rust-core release.
+  Phases 0–6 complete: IPC, audio, STT, LLM tool dispatch, editor bridges
+  (Neovim + VSCode), personal encrypted memory, doctor, enroll, AT-SPI, NVDA.
+  arm64 Windows binary added. Zero warnings across the full codebase.
+ReleaseNotesUrl: https://github.com/novafabric/yazses/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

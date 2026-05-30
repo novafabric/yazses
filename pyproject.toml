@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yazses"
+version = "0.5.0"
+description = "Local, offline voice dictation for Linux, macOS, and Windows — hold a key, speak, release"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Mohsen Seyedkazemi Moghadam", email = "mohsen.seyedkazemi@gmail.com"},
+]
+keywords = ["voice", "dictation", "speech-to-text", "whisper", "linux", "accessibility"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: No Input/Output (Daemon)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = [
+    "faster-whisper>=1.2.1",
+    "sounddevice>=0.5.5",
+    "numpy>=2.4.5",
+    "typer>=0.25.1",
+    "platformdirs>=4.9.6",
+    # Linux
+    'evdev>=1.9.3; sys_platform == "linux"',
+    # macOS
+    'pyobjc-framework-Quartz>=12.1; sys_platform == "darwin"',
+    'pyobjc-framework-Cocoa>=12.1; sys_platform == "darwin"',
+    'pyobjc-framework-ApplicationServices>=12.1; sys_platform == "darwin"',
+    'pyobjc-framework-AVFoundation>=12.1; sys_platform == "darwin"',
+    'rumps>=0.4.0; sys_platform == "darwin"',
+    # Windows
+    'pywin32>=311; sys_platform == "win32"',
+    'pystray>=0.19.5; sys_platform == "win32"',
+    'Pillow>=12.2.0; sys_platform == "win32"',
+    "onnx-asr>=0.11.0",
+    "cryptography>=48.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/novafabric/yazses"
+Repository = "https://github.com/novafabric/yazses"
+"Bug Tracker" = "https://github.com/novafabric/yazses/issues"
+
+[project.scripts]
+yazses = "yazses.cli:app"
+yazses-daemon = "yazses.main:run"
+yazses-tray = "yazses.tray.app:run"
+yazses-agent = "yazses.remote.agent:main"
+yazses-overlay = "yazses.overlay.app:run"
+
+[project.optional-dependencies]
+slm = [
+    "llama-cpp-python>=0.3.23",
+]
+lsp = [
+    "pygls>=2.1.1",
+    "pynvim>=0.6.0",
+]
+emg = [
+    "pyserial>=3.5",
+]
+ble = [
+    "bleak>=3.0.2",
+]
+overlay = [
+    "PySide6>=6.8",
+]
+all = [
+    "llama-cpp-python>=0.3.23",
+    "pygls>=2.1.1",
+    "pynvim>=0.6.0",
+    "pyserial>=3.5",
+    "bleak>=3.0.2",
+    "PySide6>=6.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-mock>=3.15.1",
+    "pytest-cov>=7.1.0",
+    "useful-moonshine-onnx>=20251121",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yazses"]

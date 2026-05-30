@@ -1,0 +1,146 @@
+"""Command dispatcher — routes CommandIntent to key sequences or text injection."""
+from __future__ import annotations
+
+import logging
+
+from yazses.commands.grammar import CommandIntent, IntentType
+from yazses.platform.base import InjectorBackend
+
+log = logging.getLogger(__name__)
+
+# Maps action names to key sequences (list of combo strings).
+# {n} and {name} are placeholder markers; dispatcher substitutes from args.
+ACTION_KEYS: dict[str, list[str]] = {
+    "undo":          ["ctrl+z"],
+    "undo_n":        ["ctrl+z"],        # repeated N times by dispatcher
+    "save":          ["ctrl+s"],
+    "copy":          ["ctrl+c"],
+    "paste":         ["ctrl+v"],
+    "comment":       ["ctrl+slash"],
+    "go_to_line":    ["ctrl+g"],        # dispatcher then types the line number + Return
+    "select_all":    ["ctrl+a"],
+    "select_to_end": ["ctrl+shift+End"],
+    "delete_lines":  [],                # dispatcher uses backspace
+    "delete_words":  [],                # dispatcher uses ctrl+BackSpace
+}
+
+
+def dispatch(intent: CommandIntent, injector: InjectorBackend, notify_fn=None) -> None:
+    """Execute a CommandIntent via the injector.
+
+    For DICTATE, calls injector.inject(raw_text).
+    For all others, dispatches key sequences or shell commands.
+    notify_fn(event_name, data) is called if provided (for IPC notifications).
+    """
+    try:
+        _execute(intent, injector)
+        if notify_fn and intent.intent != IntentType.DICTATE:
+            notify_fn("command_dispatched", {
+                "intent": intent.intent.value,
+                "action": intent.action,
+                "args": intent.args,
+            })
+    except Exception as exc:
+        log.error("dispatch failed for action %r: %s", intent.action, exc)
+        # Fall back to raw text injection on error
+        injector.inject(intent.raw_text)
+
+
+def _execute(intent: CommandIntent, injector: InjectorBackend) -> None:
+    if intent.intent == IntentType.DICTATE:
+        injector.inject(intent.raw_text)
+        return
+
+    action = intent.action
+    args = intent.args
+    keys = ACTION_KEYS.get(action)
+
+    if action == "delete_words":
+        n = int(args.get("n", "1"))
+        # ctrl+BackSpace deletes one word at a time
+        for _ in range(n):
+            injector.inject_key_sequence(["ctrl+BackSpace"])
+        return
+
+    if action == "delete_lines":
+        n = int(args.get("n", "1"))
+        for _ in range(n):
+            injector.inject_key_sequence(["ctrl+shift+k"] if True else ["ctrl+d"])
+        return
+
+    if action == "undo_n":
+        n = int(args.get("n", "1"))
+        for _ in range(n):
+            injector.inject_key_sequence(["ctrl+z"])
+        return
+
+    if action == "go_to_line":
+        injector.inject_key_sequence(["ctrl+g"])
+        injector.inject(args.get("n", ""))
+        injector.inject_key_sequence(["Return"])
+        return
+
+    if action == "go_to_function":
+        injector.inject_key_sequence(["ctrl+shift+o"])
+        injector.inject(args.get("name", ""))
+        return
+
+    if action == "go_to_class":
+        injector.inject_key_sequence(["ctrl+shift+o"])
+        injector.inject(args.get("name", ""))
+        return
+
+    if action == "go_to_file":
+        injector.inject_key_sequence(["ctrl+p"])
+        injector.inject(args.get("name", ""))
+        return
+
+    if action == "rename_symbol":
+        injector.inject_key_sequence(["F2"])
+        name = args.get("name", "")
+        if name:
+            injector.inject_key_sequence(["ctrl+a"])
+            injector.inject(name)
+            injector.inject_key_sequence(["Return"])
+        return
+
+    if action in ("new_function", "new_class", "new_file"):
+        # Insert a skeleton — for now just inject the name
+        injector.inject(args.get("name", ""))
+        return
+
+    if action in ("run_tests", "run_build", "run_last", "run_command"):
+        _run_terminal(action, args, injector)
+        return
+
+    if action == "select_lines":
+        n = int(args.get("n", "1"))
+        injector.inject_key_sequence(["ctrl+l"])
+        for _ in range(n - 1):
+            injector.inject_key_sequence(["shift+Down"])
+        return
+
+    if keys is not None:
+        injector.inject_key_sequence(keys)
+        return
+
+    # Unknown action — fall back to raw text
+    log.warning("No dispatch rule for action %r, injecting raw text", action)
+    injector.inject(intent.raw_text)
+
+
+def _run_terminal(action: str, args: dict[str, str], injector: InjectorBackend) -> None:
+    cmd_map = {
+        "run_tests": "pytest",
+        "run_build": "make build",
+        "run_last": "",
+    }
+    if action == "run_command":
+        cmd = args.get("cmd", "")
+    else:
+        cmd = cmd_map.get(action, "")
+    if cmd:
+        injector.inject(cmd)
+        injector.inject_key_sequence(["Return"])
+    elif action == "run_last":
+        injector.inject_key_sequence(["Up", "Return"])

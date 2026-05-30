@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v0.*"  # Python v0.x only — v1.x tags are handled by rust-release.yml
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get install -y libportaudio2
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+
+      - run: uv sync
+
+      - run: uv run pytest tests/ -v
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    needs: test
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.12"
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  release-linux:
+    # Builds the .deb, creates the GitHub Release, and uploads the artifact
+    # so the APT repo workflow can download it.
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: sudo apt-get install -y dpkg-dev
+
+      - name: Build .deb
+        run: |
+          chmod +x scripts/build-deb.sh
+          bash scripts/build-deb.sh
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: "*.deb"
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.deb"
+          generate_release_notes: true
+          body: |
+            Local, offline voice dictation. **Hold a key, speak, release.** No cloud, no GPU.
+
+            ## macOS
+
+            Download `YazSes-<version>.dmg` from the Assets below, open it, drag
+            **YazSes.app** into **Applications**.
+
+            On first launch, **right-click → Open** (the v0 build is unsigned;
+            signing is coming). Grant **Accessibility** + **Microphone** when prompted.
+            Default hotkey: **Right Option**. Full guide: `docs/macos-install.md`.
+
+            ## Windows
+
+            Download `YazSes-<version>-windows-x64.exe` from the Assets and run it.
+
+            SmartScreen may say *"unrecognized app"* — click **More info → Run anyway**
+            (the v0 build is unsigned; signing is coming). Default hotkey: **Right
+            Ctrl**. Full guide: `docs/windows-install.md`.
+
+            ## Linux
+
+            **One-line installer (Debian/Ubuntu):**
+            ```bash
+            bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install.sh)
+            ```
+
+            **APT repository:**
+            ```bash
+            curl -fsSL https://novafabric.github.io/yazses/apt/KEY.gpg \
+              | sudo gpg --dearmor --yes -o /usr/share/keyrings/yazses.gpg
+            echo "deb [signed-by=/usr/share/keyrings/yazses.gpg] https://novafabric.github.io/yazses/apt ./" \
+              | sudo tee /etc/apt/sources.list.d/yazses.list
+            sudo apt update && sudo apt install yazses
+            sudo usermod -aG input $USER && logout
+            systemctl --user enable --now yazses.service
+            ```
+
+            **Launchpad PPA (Ubuntu):**
+            ```bash
+            sudo add-apt-repository ppa:novafabric/yazses
+            sudo apt update && sudo apt install yazses
+            sudo usermod -aG input $USER && logout
+            systemctl --user enable --now yazses.service
+            ```
+
+            **Snap:**
+            ```bash
+            sudo snap install yazses --classic
+            sudo usermod -aG input $USER && logout
+            ```
+
+            **pipx (any Linux):**
+            ```bash
+            sudo apt install pipx libportaudio2 xdotool xclip
+            sudo usermod -aG input $USER && logout
+            pipx install yazses && pipx ensurepath
+            systemctl --user enable --now yazses.service
+            ```
+
+            **.deb package:**
+            ```bash
+            sudo apt install ./yazses_*.deb
+            sudo usermod -aG input $USER && logout
+            systemctl --user enable --now yazses.service
+            ```
+
+            Default hotkey on Linux: **Space** (configurable). Default config lives
+            at `~/.config/yazses/config.toml`.

@@ -1,0 +1,102 @@
+name: APT Repository
+
+on:
+  workflow_run:
+    workflows: ["Release", "Rust Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Release workflow run ID (optional, uses latest if empty)"
+        required: false
+        default: ""
+      workflow:
+        description: "Source workflow (release or rust-release)"
+        required: false
+        default: "rust-release"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+concurrency:
+  group: apt-repo-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  update-apt-repo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release run ID
+        id: run_id
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MANUAL_ID="${{ github.event.inputs.run_id }}"
+          EVENT_ID="${{ github.event.workflow_run.id }}"
+          WORKFLOW="${{ github.event.inputs.workflow || 'rust-release' }}"
+          # Map friendly name to filename
+          case "$WORKFLOW" in
+            release)       WF_FILE="release.yml" ;;
+            rust-release)  WF_FILE="rust-release.yml" ;;
+            *)             WF_FILE="${WORKFLOW}" ;;
+          esac
+          if [ -n "$MANUAL_ID" ]; then
+            echo "id=$MANUAL_ID" >> $GITHUB_OUTPUT
+          elif [ -n "$EVENT_ID" ]; then
+            echo "id=$EVENT_ID" >> $GITHUB_OUTPUT
+          else
+            # Auto-detect: find latest successful run with a deb-package artifact
+            RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/${WF_FILE}/runs?status=completed&per_page=10" \
+              --jq '.workflow_runs[] | select(.conclusion=="success") | .id' \
+              | head -1)
+            echo "id=$RUN_ID" >> $GITHUB_OUTPUT
+            echo "Auto-detected run ID from ${WF_FILE}: $RUN_ID"
+          fi
+
+      - name: Download .deb artifact from release workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-package
+          path: /tmp/debs
+          run-id: ${{ steps.run_id.outputs.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Import GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APT_REPO_GPG_PRIVATE_KEY }}
+          GPG_KEY_ID: ${{ secrets.APT_REPO_GPG_KEY_ID }}
+        run: |
+          set -euo pipefail
+
+          test -n "$GPG_PRIVATE_KEY" || { echo "::error::APT_REPO_GPG_PRIVATE_KEY secret is empty or missing"; exit 1; }
+          test -n "$GPG_KEY_ID"      || { echo "::error::APT_REPO_GPG_KEY_ID secret is empty or missing"; exit 1; }
+
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf 'allow-loopback-pinentry\n' > ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --yes --import
+          echo "$GPG_KEY_ID:6:" | gpg --import-ownertrust
+          gpg --list-secret-keys "$GPG_KEY_ID"
+
+          echo "" > /tmp/gpg-passphrase
+
+      - name: Update apt repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_KEY_ID: ${{ secrets.APT_REPO_GPG_KEY_ID }}
+        run: |
+          debs=(/tmp/debs/*.deb)
+          [[ ${#debs[@]} -eq 1 ]] || { echo "Expected 1 .deb, got ${#debs[@]}"; exit 1; }
+          bash scripts/update-apt-repo.sh "${debs[0]}" "$GPG_KEY_ID"
