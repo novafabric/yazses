@@ -2,46 +2,90 @@
 
 > YazSes is an offline, on-device voice agent for Linux, macOS, and Windows. Hold a key, speak a command, release — text is typed, code is committed, files open, timers start, notes are saved. No cloud. No API key. No subscription.
 
-YazSes uses faster-whisper or Moonshine v2 for speech-to-text and llama.cpp or Ollama for local LLM inference. It selects one of 20 built-in OS tools based on what you say.
+## What it is
 
-## Core concepts
+YazSes is a hold-to-talk voice daemon that replaces cloud dictation tools. It runs entirely on your machine using local AI models: faster-whisper or Moonshine v2 for speech recognition and llama.cpp or Ollama for command understanding. When you hold the hotkey, it records audio, transcribes it, decides what action you intended, and executes it — all within one second on a modern laptop.
 
-- **Hold-to-talk**: Hold the hotkey (Space on Linux, Right Option on macOS, Right Ctrl on Windows) to record. Release to transcribe and act.
-- **On-device agent**: A local LLM interprets the transcript and selects the right tool — no network required.
-- **20 OS tools**: type_text, git_commit, open_file, goto_symbol, volume_set, note_quick, commit_to_memory, recall, send_message, and more.
-- **Dual STT stack**: Moonshine v2 (~9 ms, streaming) for short commands; Whisper-large-v3-turbo for long-form dictation.
-- **Personal memory**: Encrypted SQLite vector store — voice-triggered commit, recall, and forget.
-- **Zero telemetry**: Nothing leaves the machine unless you explicitly configure an OpenAI-compatible backend.
-- **Accessibility**: AT-SPI (Linux) and NVDA (Windows) screen-reader announcements. Works with Talon.
+It is written in Rust (v1.0, default) with a stable Python implementation (v0.4.x).
+
+## Who it is for
+
+- Developers who want to dictate code, commit with voice, or navigate editors hands-free
+- Writers who want offline dictation without sending audio to Google, Apple, or Microsoft
+- Accessibility users who need hands-free computer control with full privacy
+- Power users who want a programmable voice interface with 20 built-in OS tools
+
+## What makes it different
+
+- **Fully offline**: no audio leaves the machine by default
+- **Agent, not just dictation**: a local LLM decides whether to type text, run a git command, open a file, set a timer, take a note, etc.
+- **Hold-to-talk**: natural push-to-talk interaction, works in any app
+- **Dual STT**: Moonshine v2 (9 ms streaming) for short commands + Whisper-large-v3-turbo for long-form
+- **Personal memory**: encrypted SQLite vector store, voice-queryable
+- **EMG support**: can be triggered by muscle sensors for hands-free use by people with motor disabilities
+
+## Compared to alternatives
+
+| Tool | Offline | LLM agent | Linux | Free |
+|---|---|---|---|---|
+| YazSes | ✅ | ✅ | ✅ | ✅ |
+| Dragon NaturallySpeaking | ✅ | ❌ | ❌ | ❌ |
+| Talon Voice | ✅ | ❌ | ✅ | Freemium |
+| Google Dictation | ❌ | ❌ | ✅ | ✅ |
+| Apple Dictation | ❌ | ❌ | ❌ | ✅ |
+| Whisper + scripts | ✅ | ❌ | ✅ | ✅ |
+
+## Built-in tools (20)
+
+type_text, key_sequence, git_commit, open_file, goto_symbol, volume_set, media_play_pause, screenshot_named, note_quick, time_set_timer, window_focus, app_launch, dismiss_notification, commit_to_memory, recall, forget_last, clarify, send_message, mode_switch, cancel_request
 
 ## Quick start
 
 ```sh
-pipx install yazses                      # or apt/snap/brew/winget
-yazses doctor                            # check OS prerequisites
-yazses model pull qwen3-7b               # download default LLM (~5 GB)
-yazses enroll                            # calibrate mic
+# Linux
+bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install.sh)
+
+# macOS
+brew tap novafabric/yazses && brew install --cask yazses
+
+# Windows
+winget install NovaFabric.YazSes
+
+# Cross-platform
+pipx install yazses
+
+# First run
+yazses doctor
+yazses model pull qwen3-7b
+yazses enroll
 yazses start
-# Hold Space (Linux) / Right Option (macOS) / Right Ctrl (Windows), speak, release.
 ```
 
-## Who uses this
+## Technical stack
 
-Developers, writers, accessibility users, and power users who want hands-free control of their computer without sending audio to a cloud service. Commonly used for: code dictation, voice git commits, voice note-taking, media control, and accessibility.
-
-## Alternatives it replaces
-
-Dragon NaturallySpeaking (offline but Windows-only, expensive), Talon Voice (code-focused, no LLM agent), cloud-based dictation (Google, Apple, Microsoft — sends audio to servers).
-
-## Technical details
-
-- **Languages**: Rust (v1.0, default) + Python (v0.4.x, stable)
-- **STT**: whisper.cpp (Whisper-large-v3-turbo) + Moonshine v2
-- **LLM**: llama.cpp with GBNF tool-call grammar; Ollama backend optional
+- **Languages**: Rust 1.85+ (v1.0) + Python 3.11+ (v0.4.x)
+- **STT models**: whisper.cpp (Whisper-large-v3-turbo), Moonshine v2
+- **LLM backends**: llama.cpp (GBNF tool-call grammar), Ollama (HTTP), OpenAI-compatible (opt-in)
 - **VAD**: Silero neural VAD + RMS gate fallback
-- **IPC**: JSON-RPC 2.0 over Unix socket (Linux/macOS) or named pipe (Windows)
-- **Memory**: sqlite-vec encrypted store, AES-256-GCM
-- **License**: Apache 2.0
+- **Audio**: CPAL (Rust), sounddevice (Python)
+- **IPC**: JSON-RPC 2.0 over Unix socket / named pipe
+- **Memory store**: sqlite-vec + AES-256-GCM encryption
+- **Injection backends**: xdotool, wtype, ydotool, clipboard (Linux); AppleScript, Accessibility API (macOS); SendInput, clipboard (Windows)
+- **Accessibility**: AT-SPI (Linux), NVDA (Windows)
+
+## Frequently asked questions
+
+**Does it work without internet?** Yes. All models run locally. No data is sent anywhere by default.
+
+**What GPU do I need?** None. It runs on CPU. 8 GB RAM minimum; 16 GB recommended.
+
+**Can I use my own LLM?** Yes. Any Ollama model or OpenAI-compatible endpoint works.
+
+**Does it work with Wayland?** Yes, via wtype or ydotool.
+
+**Can it type in any app?** Yes — browsers, terminals, IDEs, chat apps, anything with a focused text field.
+
+**Is it a replacement for Talon?** YazSes focuses on the AI agent + dictation use case. Talon has more advanced scripting. They can coexist.
 
 ## Documentation
 
@@ -53,9 +97,9 @@ Dragon NaturallySpeaking (offline but Windows-only, expensive), Talon Voice (cod
 - [Privacy statement](docs/privacy-statement.md)
 - [Migration guide v0.4 → v1.0](docs/migration-v04-to-v10.md)
 
-## Source
+## Project info
 
 - Repository: https://github.com/novafabric/yazses
 - Issues: https://github.com/novafabric/yazses/issues
 - License: Apache 2.0
-- Maintainer: Mohsen Seyedkazemi Ardebili
+- Maintainer: Mohsen Seyedkazemi Ardebili (mohsen.seyedkazemi@gmail.com)
