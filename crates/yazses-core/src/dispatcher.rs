@@ -801,6 +801,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires a live display server (xdotool/wtype/AppleScript)"]
     async fn type_text_returns_ok() {
         let d = Dispatcher::new(None);
         let r = d

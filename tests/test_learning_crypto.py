@@ -1,4 +1,5 @@
 import stat
+import sys
 
 import pytest
 
@@ -12,10 +13,11 @@ def test_load_or_create_key_creates_file_with_0600(tmp_path):
 
     assert key_file.exists()
     assert len(key) == 32
-    mode = stat.S_IMODE(key_file.stat().st_mode)
-    assert mode == 0o600
-    # Directory must not be world/group readable.
-    assert stat.S_IMODE(data_dir.stat().st_mode) == 0o700
+    if sys.platform != "win32":
+        # Windows uses ACLs, not Unix mode bits — skip permission assertions.
+        mode = stat.S_IMODE(key_file.stat().st_mode)
+        assert mode == 0o600
+        assert stat.S_IMODE(data_dir.stat().st_mode) == 0o700
 
 
 def test_load_or_create_key_is_stable(tmp_path):

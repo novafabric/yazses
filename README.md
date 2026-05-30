@@ -2,240 +2,208 @@
 
 [![Tests](https://github.com/novafabric/yazses/actions/workflows/test.yml/badge.svg)](https://github.com/novafabric/yazses/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/yazses)](https://pypi.org/project/yazses/)
-[![Get it from the Snap Store](https://snapcraft.io/en/dark/install.svg)](https://snapcraft.io/yazses)
-[![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
+[![Snap Store](https://snapcraft.io/en/dark/install.svg)](https://snapcraft.io/yazses)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 
-Hold a key, speak, release — the on-device AI agent understands and acts: typing text, running git commands, controlling media, opening files, querying your personal memory — all without a cloud.
-
-```
-Hold hotkey (>0.5 s) → audio → STT → on-device LLM → dispatch one of 20 OS tools → result in focused window
-```
-
-Powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (STT) + [llama.cpp](https://github.com/ggerganov/llama.cpp) (LLM) on CPU. Works in browsers, terminals, IDEs, chat apps, any app. Offline. Private.
+**Hold a key → speak → release.** An on-device AI agent types text, commits code, controls media, takes notes, and more — entirely offline. No cloud. No API key. No subscription.
 
 ---
 
-## What YazSes does
+## Quick Start
 
-When you hold the hotkey, YazSes captures audio and passes it through an on-device STT model. The transcript is handed to a local LLM (no API key, no network request) which selects one of 20 OS-level tools and calls it with extracted parameters. The result appears in the focused window within one second on a modern laptop. Nothing leaves the machine.
+**Step 1 — Install**
 
-**20 built-in tools:**
-
-| Tool | What it does |
+| Platform | Command |
 |---|---|
-| `type_text` | Insert transcribed text at cursor |
-| `key_sequence` | Send an arbitrary key chord (Ctrl+S, etc.) |
-| `git_commit` | Stage all changes and commit with a spoken message |
-| `open_file` | Open a file path spoken aloud |
-| `goto_symbol` | Jump to a named function or class via LSP |
-| `volume_set` | Set system audio volume to a spoken level |
-| `media_play_pause` | Toggle media playback |
-| `screenshot_named` | Take a screenshot with a spoken filename |
-| `note_quick` | Append a timestamped note to the daily note file |
-| `time_set_timer` | Set a countdown timer with a spoken duration |
-| `window_focus` | Bring a named application window to the foreground |
-| `app_launch` | Launch an application by name |
-| `dismiss_notification` | Dismiss the topmost desktop notification |
-| `commit_to_memory` | Store a spoken fact in the encrypted local memory store |
-| `recall` | Query the local memory store with a spoken question |
-| `forget_last` | Delete the most recently committed memory entry |
-| `clarify` | Ask the agent to repeat or rephrase what it heard |
-| `send_message` | Compose and send a message via a configured messenger |
-| `mode_switch` | Switch the active voice profile (dictation / command / code) |
-| `cancel_request` | Abort the current agent action |
+| **Linux** (Debian/Ubuntu) | `bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)` |
+| **Linux** (any distro) | `pipx install yazses` |
+| **macOS** | `brew tap novafabric/yazses && brew install --cask yazses` |
+| **Windows** | `winget install NovaFabric.YazSes` |
+
+**Step 2 — Set up**
+
+```sh
+yazses doctor               # check everything is ready
+yazses model pull qwen3-7b  # download the AI model (~5 GB, one-time)
+yazses enroll               # calibrate your microphone (30 seconds)
+yazses start                # start the daemon
+```
+
+**Step 3 — Use it**
+
+| OS | Hold this key | Say anything |
+|---|---|---|
+| Linux | `Space` | "open terminal", "commit add new feature", "type hello world" |
+| macOS | `Right Option` | "set volume to 50", "take a screenshot called mockup" |
+| Windows | `Right Ctrl` | "remember my meeting is at 3pm", "what did I tell you yesterday?" |
+
+Release the key — YazSes acts within one second.
+
+> **First time on macOS?** Right-click the app → Open (Gatekeeper), then grant Accessibility + Microphone when prompted.
+>
+> **First time on Windows?** If SmartScreen warns you, click **More info → Run anyway**.
+>
+> **First time on Linux?** Run `sudo usermod -aG input "$USER"` and re-login before starting.
 
 ---
 
-## Supported platforms
+## What you can say
 
-| OS      | Hotkey default | Install                                            | v1.0 Rust | v0.4.x Python |
-|---------|----------------|----------------------------------------------------|-----------|---------------|
-| Linux   | `Space`        | apt / snap / PPA / AUR / .deb / pipx              | Stable    | Stable        |
-| macOS   | `Right Option` | `.dmg` / Homebrew Cask                             | Preview   | Stable        |
-| Windows | `Right Ctrl`   | `.exe` installer / winget                          | Preview   | Stable        |
+YazSes understands natural language and maps it to 20 built-in actions:
 
-> **Why Right Ctrl on Windows, not Right Alt?** On many international layouts Right Alt acts as **AltGr** — used to type `@`, `€`, `{}`, `[]`, `\`, `~`, etc. Hijacking it would break normal typing. Right Ctrl is rarely used for typing, so it is the safer default. Every platform's hotkey is configurable in `config.toml`.
+| Say something like… | What happens |
+|---|---|
+| *"type hello world"* | Types text at the cursor |
+| *"commit added login feature"* | Runs `git add -A && git commit -m "added login feature"` |
+| *"open main.py"* | Opens the file |
+| *"go to function parse_config"* | Jumps to the symbol via LSP |
+| *"set volume to 30"* | Sets system volume |
+| *"take a screenshot called diagram"* | Saves `diagram.png` |
+| *"remember my password expires on June 1"* | Stores in encrypted local memory |
+| *"what did I remember about passwords?"* | Queries local memory |
+| *"set a timer for 25 minutes"* | Starts a countdown |
+| *"open VS Code"* | Launches the application |
+| *"press Control S"* | Sends the key chord |
+
+---
+
+## How it works
+
+```
+Hold hotkey → record audio → speech-to-text → local LLM → pick tool → execute
+```
+
+Everything runs on your CPU. The LLM (Qwen3-7B by default) reads the transcript and decides which of the 20 tools to call. Result appears in the focused window within ~1 second on a modern laptop.
+
+**Models used:**
+- **STT:** Moonshine v2 (9 ms, streaming) for short commands · Whisper-large-v3-turbo for long dictation
+- **LLM:** llama.cpp with GBNF tool-call grammar (Qwen3-7B default) · Ollama backend optional
 
 ---
 
 ## Requirements
 
-- **OS:** Linux (primary), macOS 13+, Windows 10+
-- **RAM:** 16 GB recommended; 8 GB usable with Phi-4-mini Q4_K_M
-- **Disk:** 6–10 GB for the default model (Qwen3-7B-Instruct Q4_K_M)
-- **CPU:** 4+ cores; no GPU required
-- **Microphone:** any USB or built-in microphone
-- **Linux text injection:** one of xdotool (X11), wtype (Wayland), or ydotool (Wayland)
-
----
-
-## Quick install
-
-```sh
-# macOS  — via Homebrew tap
-brew tap novafabric/yazses && brew install --cask yazses
-
-# Windows  — via winget (pending PR review at microsoft/winget-pkgs#371427)
-winget install NovaFabric.YazSes
-
-# Linux  — via the apt repo
-bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install.sh)
-
-# Cross-platform fallback — pip
-pipx install yazses
-```
-
-The Rust binary is the v1.0 default for all installers above. The Python v0.4.x path remains available via `uv run yazses` (from source) or `pipx install "yazses<1.0"`.
-
-After install:
-
-| OS      | What's left |
-|---------|-------------|
-| macOS   | Right-click → Open the first time (unsigned dev preview); grant **Accessibility** + **Microphone** when prompted; hold **Right Option** to dictate. |
-| Windows | If SmartScreen warns, click **More info → Run anyway** (unsigned dev preview); hold **Right Ctrl** to dictate. |
-| Linux   | `sudo usermod -aG input "$USER"` then re-login; `systemctl --user enable --now yazses.service`; hold **Space** to dictate. |
-
----
-
-## First use
-
-```sh
-yazses doctor               # check OS prerequisites
-yazses model pull qwen3-7b  # download default LLM (~5 GB, Qwen3-7B-Instruct Q4_K_M)
-yazses enroll               # calibrate VAD for your microphone
-yazses start
-# Hold Space (Linux) or the configured hotkey, speak, release.
-```
+| | |
+|---|---|
+| **OS** | Linux (primary) · macOS 13+ · Windows 10+ |
+| **RAM** | 8 GB minimum · 16 GB recommended |
+| **Disk** | 6–10 GB for the default model |
+| **CPU** | 4+ cores · no GPU required |
+| **Mic** | Any USB or built-in microphone |
 
 ---
 
 ## Key features
 
-- **Sub-second on-device agent loop** — hold to act under 1 s P50 on a modern laptop; no cloud round-trip
-- **20 OS-level tools** — type text, commit code, control media, take screenshots, set timers, take notes, and more
-- **Dual-stack STT** — Moonshine v2 (~9 ms, streaming) for short utterances; Whisper-large-v3-turbo for long-form
-- **Editor LSP bridge** — Neovim and VS Code context injected into both ASR (vocabulary biasing) and LLM (symbol-aware suggestions); improves accuracy on camelCase and snake_case identifiers spoken aloud
-- **Personal memory** — encrypted SQLite vector store; voice-triggered commit/recall/forget
-- **Zero telemetry, zero cloud by default** — OpenAI-compatible backend is opt-in
-- **Accessibility** — AT-SPI (Linux) and NVDA (Windows) screen-reader announcements; Talon coexistence file auto-generated
+- **Fully offline** — no audio, no text, no data leaves the machine by default
+- **Agent, not just dictation** — understands intent, not just words
+- **Dual STT stack** — fast streaming for commands, accurate long-form for dictation
+- **Personal memory** — encrypted local vector store, voice-queryable
+- **Editor integration** — Neovim and VS Code LSP context improves accuracy on code identifiers
+- **Accessibility** — AT-SPI (Linux) and NVDA (Windows) screen-reader support; Talon coexistence
+- **EMG support** — works with muscle sensors for motor-disability use cases
 
 ---
 
 ## Configuration
 
-`config.toml` lives in the platform's standard config directory:
+Config file location:
 
-| OS      | Path |
-|---------|------|
-| Linux   | `~/.config/yazses/config.toml` |
-| macOS   | `~/Library/Application Support/yazses/config.toml` |
+| OS | Path |
+|---|---|
+| Linux | `~/.config/yazses/config.toml` |
+| macOS | `~/Library/Application Support/yazses/config.toml` |
 | Windows | `%APPDATA%\yazses\config.toml` |
 
-Key fields:
+Essential settings:
 
 ```toml
 [hotkey]
-key = "auto"               # "auto" → Space (Linux) / right_option (macOS) / right_ctrl (Windows)
-hold_threshold_ms = 500
+key = "auto"               # Space (Linux) / right_option (macOS) / right_ctrl (Windows)
+hold_threshold_ms = 500    # how long to hold before recording starts
 
 [llm]
-model_path = ""            # path to a GGUF model; empty = use the model pulled by `yazses model pull`
+model_path = ""            # empty = use the model from `yazses model pull`
 
 [stt]
-backend = "auto"           # "moonshine" (fast, streaming) | "whisper" (long-form) | "auto"
+backend = "auto"           # "moonshine" (fast) | "whisper" (accurate) | "auto"
 
 [audio]
 device = ""                # empty = system default microphone
 
 [memory]
-passphrase = ""            # empty = unencrypted; set a passphrase to enable encryption
+passphrase = ""            # set a passphrase to encrypt the memory store
 ```
 
-A complete reference is in the [CLI reference](docs/cli-reference.md).
+See the [CLI reference](docs/cli-reference.md) for all options.
 
-### Tuning the silence threshold
+### Microphone not working?
 
-If dictation does nothing and the daemon logs `Silent audio -- discarding`, your
-speech is below the VAD gate (`accessibility.vad_threshold`). Measure your voice
-and apply a fitting threshold:
+If YazSes does nothing and the log shows `Silent audio -- discarding`:
 
 ```sh
-yazses mic-level          # record ~4s, print your level + a recommendation
-yazses mic-level --set    # same, and write the recommendation to config.toml
-yazses stop && yazses start   # restart to apply
+yazses mic-level --set   # measure your voice and set the right threshold
+yazses stop && yazses start
 ```
-
-Speak in your normal voice during the countdown. Lower the threshold for quiet
-speech; raise it if background noise produces spurious text. Re-run any time your
-speaking volume changes (e.g. quiet late-night dictation).
 
 ---
 
-## Distribution channels
+## All install options
 
-#### macOS
-
-```sh
-# Homebrew Cask (primary)
-brew tap novafabric/yazses && brew install --cask yazses
-
-# Direct .dmg download (no Homebrew needed)
-# https://github.com/novafabric/yazses/releases/latest
-```
-
-#### Windows
-
-```powershell
-# winget (pending review)
-winget install NovaFabric.YazSes
-
-# Direct .exe download
-# https://github.com/novafabric/yazses/releases/latest
-```
-
-#### Linux
+### Linux
 
 ```bash
-# APT repo (Debian/Ubuntu) — v1.0 Rust binary
-curl -fsSL https://novafabric.github.io/yazses/apt/KEY.gpg \
-  | sudo gpg --dearmor --yes -o /usr/share/keyrings/yazses.gpg
-echo "deb [signed-by=/usr/share/keyrings/yazses.gpg] https://novafabric.github.io/yazses/apt ./" \
-  | sudo tee /etc/apt/sources.list.d/yazses.list
-sudo apt update && sudo apt install yazses
+# APT repo — Debian / Ubuntu (recommended)
+bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
 
-# Launchpad PPA (Ubuntu) — v1.0 Rust binary
-sudo add-apt-repository ppa:novafabric/yazses
-sudo apt update && sudo apt install yazses
+# PPA — Ubuntu
+sudo add-apt-repository ppa:novafabric/yazses && sudo apt install yazses
 
-# Snap (most distros with snapd) — v1.0 Rust binary
+# Snap
 sudo snap install yazses --classic
 
-# AUR (Arch / Manjaro / EndeavourOS) — v1.0 Rust binary
+# AUR — Arch / Manjaro
 yay -S yazses
 
-# .deb download
-# https://github.com/novafabric/yazses/releases/latest
-sudo apt install ./yazses_*.deb
-
-# pipx — Python v0.4.x
+# pipx (Python v0.4.x)
 sudo apt install libportaudio2 xdotool xclip pipx
 pipx install yazses
+```
+
+### macOS
+
+```sh
+# Homebrew Cask (recommended)
+brew tap novafabric/yazses && brew install --cask yazses
+
+# Direct download
+# https://github.com/novafabric/yazses/releases/latest
+```
+
+### Windows
+
+```powershell
+# winget (recommended)
+winget install NovaFabric.YazSes
+
+# Direct download
+# https://github.com/novafabric/yazses/releases/latest
 ```
 
 ---
 
 ## Documentation
 
-| Document | Contents |
+| | |
 |---|---|
-| [`docs/install-linux.md`](docs/install-linux.md) | Linux detailed install guide (apt, snap, PPA, AUR, pipx) |
-| [`docs/macos-install.md`](docs/macos-install.md) | macOS detailed install guide (Gatekeeper, Accessibility, Microphone) |
-| [`docs/windows-install.md`](docs/windows-install.md) | Windows detailed install guide (SmartScreen, antivirus, privacy) |
-| [`docs/cli-reference.md`](docs/cli-reference.md) | Full CLI reference — all commands and flags |
-| [`docs/plugin-sdk.md`](docs/plugin-sdk.md) | Plugin SDK — adding custom tools and voice commands |
-| [`docs/privacy-statement.md`](docs/privacy-statement.md) | What data stays on-device, what is never collected |
-| [`docs/migration-v04-to-v10.md`](docs/migration-v04-to-v10.md) | Migrating from Python v0.4.x to Rust v1.0 |
+| [Install on Linux](docs/install-linux.md) | Detailed Linux guide — permissions, injection backends, service setup |
+| [Install on macOS](docs/macos-install.md) | Gatekeeper, Accessibility, Microphone permissions |
+| [Install on Windows](docs/windows-install.md) | SmartScreen, antivirus exceptions, privacy settings |
+| [CLI reference](docs/cli-reference.md) | All commands and flags |
+| [Plugin SDK](docs/plugin-sdk.md) | Adding custom tools and voice commands |
+| [Privacy statement](docs/privacy-statement.md) | What stays on-device, what is never collected |
+| [Migration v0.4 → v1.0](docs/migration-v04-to-v10.md) | Upgrading from the Python version |
 
 ---
 
@@ -246,25 +214,25 @@ pipx install yazses
 ```bash
 git clone https://github.com/novafabric/yazses
 cd yazses
-cargo build                          # default features, no native ML libs needed for dev
-cargo test --workspace               # 94 tests
+cargo build
+cargo test --workspace
 ```
 
-Feature flags for optional backends:
+Optional backends:
 
 | Flag | Enables |
 |---|---|
-| `--features whisper` | whisper.cpp STT backend via whisper-rs |
-| `--features moonshine` | Moonshine v2 streaming STT backend |
-| `--features llama-cpp` | llama.cpp LLM backend (GBNF tool calls) |
-| `--features ollama` | Ollama HTTP LLM backend |
-| `--features silero` | Silero VAD (neural, replaces RMS gate) |
+| `--features whisper` | whisper.cpp STT |
+| `--features moonshine` | Moonshine v2 streaming STT |
+| `--features llama-cpp` | llama.cpp LLM |
+| `--features ollama` | Ollama HTTP LLM |
+| `--features silero` | Silero neural VAD |
 
-### Python v0.4.x
+### Python (v0.4.x)
 
 ```bash
 uv sync
-uv run pytest tests/ -v   # 246 tests across all platforms
+uv run pytest tests/ -v
 ```
 
 ---
