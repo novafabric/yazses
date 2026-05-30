@@ -272,3 +272,5 @@ uv run pytest tests/ -v   # 246 tests across all platforms
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
+
+If YazSes is useful to you, a ⭐ on GitHub and a mention in your project, blog, or talk is the best way to support continued development.
