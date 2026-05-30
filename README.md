@@ -152,7 +152,7 @@ device = ""                # empty = system default microphone
 passphrase = ""            # empty = unencrypted; set a passphrase to enable encryption
 ```
 
-A complete reference is in [`docs/architecture.md`](docs/architecture.md).
+A complete reference is in the [CLI reference](docs/cli-reference.md).
 
 ### Tuning the silence threshold
 
@@ -229,10 +229,13 @@ pipx install yazses
 
 | Document | Contents |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | System architecture, data flow, state machine, crate map |
-| [`docs/adr/`](docs/adr/) | 11 binding architectural decision records (Rust core, dual STT, llama.cpp+MLX, sqlite-vec memory, zero telemetry, cargo-dist, …) |
+| [`docs/install-linux.md`](docs/install-linux.md) | Linux detailed install guide (apt, snap, PPA, AUR, pipx) |
 | [`docs/macos-install.md`](docs/macos-install.md) | macOS detailed install guide (Gatekeeper, Accessibility, Microphone) |
 | [`docs/windows-install.md`](docs/windows-install.md) | Windows detailed install guide (SmartScreen, antivirus, privacy) |
+| [`docs/cli-reference.md`](docs/cli-reference.md) | Full CLI reference — all commands and flags |
+| [`docs/plugin-sdk.md`](docs/plugin-sdk.md) | Plugin SDK — adding custom tools and voice commands |
+| [`docs/privacy-statement.md`](docs/privacy-statement.md) | What data stays on-device, what is never collected |
+| [`docs/migration-v04-to-v10.md`](docs/migration-v04-to-v10.md) | Migrating from Python v0.4.x to Rust v1.0 |
 
 ---
 

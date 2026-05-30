@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use YazSes in your research or projects, please cite it as below."
+type: software
+title: YazSes
+abstract: >
+  YazSes is an offline, on-device voice agent for Linux, macOS, and Windows.
+  Hold a key, speak a command, release — text is typed, code is committed,
+  files open, notes are saved. Powered by faster-whisper and llama.cpp.
+  No cloud dependency, no API key, no subscription.
+authors:
+  - family-names: Seyedkazemi Ardebili
+    given-names: Mohsen
+    email: mohsen.seyedkazemi@gmail.com
+repository-code: https://github.com/novafabric/yazses
+url: https://github.com/novafabric/yazses
+license: Apache-2.0
+keywords:
+  - voice dictation
+  - speech to text
+  - voice typing
+  - hold to talk
+  - offline AI
+  - on-device AI
+  - voice agent
+  - whisper
+  - faster-whisper
+  - llama.cpp
+  - accessibility
+  - Python
+  - Rust
+  - Linux
+  - macOS
+  - Windows
+  - cross-platform
