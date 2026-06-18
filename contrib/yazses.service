@@ -11,6 +11,10 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+# Pass the X11 display from the desktop session so xdotool/xclip can inject text.
+# Requires the session to export DISPLAY/XAUTHORITY to the systemd user manager
+# (GNOME/GDM does this automatically; run install-local.sh for a guaranteed fallback).
+PassEnvironment=DISPLAY XAUTHORITY
 
 [Install]
 WantedBy=graphical-session.target

@@ -12,6 +12,7 @@ class IntentType(str, Enum):
     EDIT = "edit"
     REFACTOR = "refactor"
     TERMINAL = "terminal"
+    MACRO = "macro"
 
 
 @dataclass
@@ -84,15 +85,28 @@ def classify(
     text: str,
     profile: str = "default",
     slm_router: object | None = None,
+    macro_table: object | None = None,
 ) -> CommandIntent:
     """Classify transcribed text as a command or plain dictation.
 
     Returns CommandIntent with intent=DICTATE if no command matches.
+    Tier 0: optional user macro table (whole-utterance exact match), checked first.
     Tier 1: regex rules (< 5 ms).
     Tier 2: optional SLM router called when Tier 1 returns DICTATE.
     """
     if not text or not text.strip():
         return CommandIntent(intent=IntentType.DICTATE, action="inject", raw_text=text)
+
+    # Tier 0: user-defined macros (run before the regex grammar).
+    if macro_table is not None:
+        macro = macro_table.match(text)  # type: ignore[union-attr]
+        if macro is not None:
+            return CommandIntent(
+                intent=IntentType.MACRO,
+                action="expand",
+                args={"trigger": macro.trigger},
+                raw_text=text,
+            )
 
     normalised = _normalise_numwords(text.strip())
 

@@ -1,15 +1,42 @@
-"""Linux backend bundle. Wraps the existing modules without moving them so the
-v1 test suite continues to pass during Phase 0 of the cross-platform refactor.
-"""
+"""Linux backend bundle."""
 
 from __future__ import annotations
+
+import logging
+import os
 
 from yazses.platform.base import Platform
 from yazses.platform.linux.paths import build_paths
 
+log = logging.getLogger(__name__)
+
+
+def _make_hotkey(key_id: str, threshold_ms: int, on_start, on_end):
+    in_snap = "SNAP" in os.environ
+    has_x11 = bool(os.environ.get("DISPLAY"))
+
+    if in_snap and has_x11:
+        try:
+            from yazses.platform.linux.hotkey_xgrab import X11GrabHotkey
+            return X11GrabHotkey(
+                key_id=key_id,
+                threshold_ms=threshold_ms,
+                on_hold_start=on_start,
+                on_hold_end=on_end,
+            )
+        except Exception as exc:
+            log.warning("X11GrabHotkey unavailable (%s), falling back to evdev", exc)
+
+    from yazses.platform.linux.hotkey import LinuxHotkey
+    return LinuxHotkey(
+        key_id=key_id,
+        threshold_ms=threshold_ms,
+        on_hold_start=on_start,
+        on_hold_end=on_end,
+    )
+
 
 def build_platform() -> Platform:
-    from yazses.platform.linux.hotkey import LinuxHotkey
     from yazses.platform.linux.injector import LinuxInjector
     from yazses.platform.linux.ipc import UnixSocketIpcClient, UnixSocketIpcServer
     from yazses.platform.linux.lifecycle import LinuxLifecycle
@@ -22,16 +49,11 @@ def build_platform() -> Platform:
         paths=paths,
         permissions=LinuxPermissions(),
         lifecycle=LinuxLifecycle(paths=paths),
-        hotkey_factory=lambda key_id, threshold_ms, on_start, on_end: LinuxHotkey(
-            key_id=key_id,
-            threshold_ms=threshold_ms,
-            on_hold_start=on_start,
-            on_hold_end=on_end,
-        ),
+        hotkey_factory=_make_hotkey,
         injector_factory=LinuxInjector,
         ipc_server_factory=lambda socket_path: UnixSocketIpcServer(socket_path),
         ipc_client_factory=lambda socket_path: UnixSocketIpcClient(socket_path),
-        tray_factory=None,  # Linux tray deferred per the cross-platform plan.
+        tray_factory=None,
         tray_default_enabled=False,
     )
 

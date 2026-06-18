@@ -30,3 +30,33 @@ class FasterWhisperEngine:
             kwargs["initial_prompt"] = initial_prompt
         segments, _ = self._model.transcribe(audio, **kwargs)
         return " ".join(seg.text.strip() for seg in segments).strip()
+
+    def transcribe_words(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = 16000,
+        initial_prompt: str | None = None,
+    ) -> "tuple[str, list]":
+        """Transcribe with per-word timestamps for Prosody Ink (spec-prosody-ink).
+
+        Returns ``(text, words)`` where ``words`` is a list of
+        :class:`yazses.postprocess.prosody.Word`. Used only on the batch path when
+        ``[prosody] enabled`` — the small ``word_timestamps=True`` decode cost is
+        not paid by non-prosody users (who keep the :meth:`transcribe` fast path).
+        Degrades to an empty word list if the model yields no per-word data.
+        """
+        from yazses.postprocess.prosody import Word
+
+        if audio.size == 0:
+            return "", []
+        kwargs: dict = {"language": "en", "word_timestamps": True}
+        if initial_prompt:
+            kwargs["initial_prompt"] = initial_prompt
+        segments, _ = self._model.transcribe(audio, **kwargs)
+        texts: list[str] = []
+        words: list[Word] = []
+        for seg in segments:
+            texts.append(seg.text.strip())
+            for w in getattr(seg, "words", None) or []:
+                words.append(Word(text=w.word.strip(), start=float(w.start), end=float(w.end)))
+        return " ".join(texts).strip(), words

@@ -31,6 +31,9 @@ repo. Run `yazses --help` or `yazses <command> --help` for full option text.
 |---|---|
 | `yazses inject "text"` | Inject text into the focused app without recording (tests the injection backend). |
 | `yazses enroll` | Run the accessibility calibration wizard (writes `vad_threshold`, etc.). Note: can set a too-high threshold in a noisy room — verify with `yazses mic-level`. |
+| `yazses punch-in` | Re-speak just the wrong phrase to correct the last dictation burst. Records a short window, aligns it against the last burst, deletes it and retypes it corrected. Requires `[punch_in] enabled = true`. |
+| `yazses punch-in --dry-run` | List candidate spans without editing, so you can confirm first. |
+| `yazses punch-in --choose N` | Apply the candidate at rank `N` (0 = best match). |
 
 ## Voice-activity overlay (sonar)
 
@@ -89,6 +92,101 @@ on the machine, encrypted at rest with a machine-bound key.
 |---|---|
 | `yazses model list` | List available / downloaded SLM intent-routing models. |
 | `yazses model download <name>` | Download an SLM model. |
+
+## Voice macros (Say-Macro)
+
+Off by default. Enable in `config.toml`, then define triggers in a sibling
+`macros.toml`:
+
+```toml
+# config.toml
+[macros]
+enabled = true
+author  = "Your Name"      # value substituted for ${author}
+path    = "macros.toml"    # relative to the config dir, or absolute
+```
+
+```toml
+# macros.toml — speak the trigger alone to expand it
+[[macro]]
+trigger = "license header"
+type    = "text"
+text    = "# SPDX-License-Identifier: MIT\n# Copyright (c) ${date} ${author}\n"
+
+[[macro]]
+trigger = "try except"
+type    = "snippet"        # ${cursor} marks where the caret lands after expansion
+snippet = "try:\n    ${cursor}\nexcept Exception as exc:\n    raise"
+```
+
+- **Matching is whole-utterance exact** (case/whitespace/trailing-punctuation
+  insensitive): saying *"license header"* on its own fires; saying it inside a
+  sentence does not, so macros never trigger mid-dictation.
+- A macro takes precedence over a built-in command of the same phrase.
+- **Placeholders:** `${cursor}` (snippet caret, first occurrence), `${date}`
+  (`YYYY-MM-DD`), `${time}` (`HH:MM`), `${author}` (from config), `${clipboard}`.
+  Unknown `${...}` tokens are left literal. No shell/command execution.
+- `type = "actions"` (OS/app key chains) is parsed but dormant in this release
+  (lands in P2).
+
+## Mid-Thought Undo
+
+On by default (`[revise] enabled = true`). Say **"scratch that"** (or "delete
+that" / "no scratch that") as a whole utterance to delete the last thing YazSes
+typed — it issues backspaces, so it works in any text field, and a buffer ledger
+ensures it never deletes more than YazSes injected. Saying the phrase inside a
+sentence ("scratch the surface") does not trigger it. Disable with
+`[revise] enabled = false`.
+
+## Punch-In — correct by re-speaking (off by default)
+
+Enable with `[punch_in] enabled = true`. Run `yazses punch-in`, re-speak just the
+wrong phrase, and YazSes locates the closest span in the last burst it typed
+(stdlib `difflib`), deletes that burst, and retypes it corrected. Because pure
+respeak fixes only ~35% on the first try (Suhm 2001), the alignment surfaces the
+top candidates rather than silently splicing — use `--dry-run` to review them and
+`--choose N` to apply a specific span.
+
+```toml
+[punch_in]
+enabled = true
+min_score = 0.5         # minimum difflib similarity to surface a span
+max_candidates = 3
+record_seconds = 4.0    # re-record window for the respoken phrase
+```
+
+## Prosody Ink — prosody-driven formatting (off by default, batch dictation only)
+
+Enable with `[prosody] enabled = true`. A long inter-word pause becomes a
+paragraph break; with `format = "markdown"` and the `prosody` extra
+(`uv sync --extra prosody` → parselmouth) vocal emphasis becomes **bold**.
+`format = "none"` keeps paragraph breaks (universal whitespace) and drops bold.
+Dictation only; skipped on the streaming path.
+
+```toml
+[prosody]
+enabled = true
+format = "markdown"        # none | markdown
+pause_paragraph_ms = 700
+emphasis_enabled = true
+emphasis_sensitivity = 0.65
+max_latency_ms = 150       # above this, logs a warning and degrades to pause-only
+```
+
+## Ghost Ahead — endpoint pre-warm (off by default)
+
+Enable with `[endpoint] enabled = true`. The daemon predicts *when* you stop
+(stable confirmed prefix + trailing silence) and pre-warms the decode path to hide
+release latency. Pre-warm is harmless — the authoritative transcript still happens
+on real hold-release, so a wrong guess can never truncate text. Speculative
+finalize stays gated behind `speculative_finalize` (Phase 2).
+
+```toml
+[endpoint]
+enabled = true
+prewarm = true
+debounce_ms = 500          # anti-thrash between endpoint fires
+```
 
 ## Diagnostic log format
 

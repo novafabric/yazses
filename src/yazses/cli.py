@@ -286,6 +286,42 @@ def mark_wrong(
         raise typer.Exit(1)
 
 
+@app.command(name="punch-in")
+def punch_in(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List candidate spans without editing (confirm first)."
+    ),
+    choose: int = typer.Option(
+        0, "--choose", "-n", help="Apply the candidate at this rank (0 = best)."
+    ),
+) -> None:
+    """Correct the last dictation by re-speaking just the wrong phrase (spec-punch-in).
+
+    Requires `[punch_in] enabled = true`. The daemon records a short window, aligns
+    the respoken phrase against the last burst it typed, then deletes that burst and
+    retypes it corrected. Use --dry-run to review candidate spans first, then re-run
+    with --choose N to apply a specific one.
+    """
+    platform = get_platform()
+    client = platform.ipc_client_factory(platform.paths.ipc_socket)
+    try:
+        result = client.call("punch_in", choose=choose, apply=not dry_run)
+    except IpcUnreachableError:
+        typer.echo("Daemon is not running. Start it with: yazses start", err=True)
+        raise typer.Exit(1)
+    cands = result.get("candidates") or []
+    if result.get("ok"):
+        typer.echo(f"Corrected: {result['old']!r} -> {result['new']!r}")
+        return
+    if dry_run and cands:
+        typer.echo("Candidate spans (re-run with --choose N to apply):")
+        for i, c in enumerate(cands):
+            typer.echo(f"  [{i}] {c['old']!r} -> {c['new']!r}  (score {c['score']})")
+        return
+    typer.echo(f"Punch-In failed: {result.get('reason', 'no candidates')}", err=True)
+    raise typer.Exit(1)
+
+
 @app.command()
 def tune(
     apply: bool = typer.Option(False, "--apply", help="Review and apply proposals interactively."),

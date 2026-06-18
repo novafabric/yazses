@@ -145,6 +145,85 @@ class LearningConfig:
 
 
 @dataclass
+class MacrosConfig:
+    """v2 — Say-Macro: user-programmable voice macros (spec-say-macro).
+
+    OFF by default per ADR-011. When enabled, triggers and expansions are read
+    from a dedicated ``macros.toml`` (sibling of config.toml); this section only
+    carries the switches. P1 supports ``text`` and ``snippet`` expansions matched
+    by whole-utterance exact match; OS-action chains land in P2.
+    """
+    enabled: bool = False
+    path: str = "macros.toml"         # relative to config dir, or absolute
+    author: str = ""                  # value substituted for ${author}
+
+
+@dataclass
+class ReviseConfig:
+    """v2 — Mid-Thought Undo (spec-mid-thought-undo), P1 template layer.
+
+    "scratch that" / "delete that" delete the last YazSes-injected dictation
+    burst via backspaces (works in any text field). On by default with the rest
+    of the command grammar; open-ended "no, make it X" rewrite is deferred to P2.
+    """
+    enabled: bool = True
+
+
+@dataclass
+class PunchInConfig:
+    """v2 — Punch-In (spec-punch-in), P1 alignment core.
+
+    Re-speak a phrase to correct a span; the daemon/UI surfaces the top aligned
+    candidates to confirm (not auto-splice) because pure respeak fixes only ~35%
+    (Suhm 2001). OFF by default; the interactive re-record + confirm flow is P2.
+    """
+    enabled: bool = False
+    min_score: float = 0.5            # minimum difflib similarity to surface a span
+    max_candidates: int = 3
+    record_seconds: float = 4.0       # re-record window for the respoken phrase
+
+
+@dataclass
+class EndpointConfig:
+    """v2 — Ghost Ahead -> endpoint anticipation (spec-ghost-ahead), P1 core.
+
+    Predicts *when* the speaker stops (stable partial + trailing silence) to hide
+    release latency. OFF by default; the authoritative transcript always stays on
+    real hold-release. Phase 1 = harmless pre-warm (eager decode on endpoint);
+    speculative finalize (Phase 2) stays gated behind ``speculative_finalize``.
+    """
+    enabled: bool = False
+    min_silence_s: float = 0.3
+    stable_updates: int = 2
+    prewarm: bool = True              # Phase 1: eagerly decode the buffer on endpoint
+    speculative_finalize: bool = False  # Phase 2 (gated): decode early, discardable
+    debounce_ms: int = 500           # min gap between endpoint fires (anti-thrash)
+    prefix_stable_ms: int = 400      # confirmed prefix unchanged this long = content flat
+    falling_window_ms: int = 250     # window over which trailing energy must be falling
+
+
+@dataclass
+class ProsodyConfig:
+    """v2 — Prosody Ink (spec-prosody-ink), P1 wired into the dictation pipeline.
+
+    Maps vocal prosody to text formatting: a long inter-word pause becomes a
+    paragraph break (Phase 1, no acoustic dep), vocal emphasis becomes bold
+    (Phase 2, needs the ``prosody`` extra → parselmouth). OFF by default; batch +
+    dictation only. ``format="none"`` keeps the universal pause→¶ whitespace but
+    suppresses emphasis (no portable way to express bold in plain text). The
+    pitch→question signal stays gated behind ``experimental_pitch_question`` and
+    is never built into Phase 1 (acoustically unreliable, ~64.6%; PMC2631211).
+    """
+    enabled: bool = False
+    format: str = "none"              # none | markdown
+    pause_paragraph_ms: int = 700     # inter-word gap (ms) at/above which a ¶ is inserted
+    emphasis_enabled: bool = True     # bold prominent words (only when format renders bold)
+    emphasis_sensitivity: float = 0.65  # 0..1; higher = fewer, surer bolds (precision bias)
+    experimental_pitch_question: bool = False
+    max_latency_ms: int = 150         # latency valve: above this, log + degrade to pause-only
+
+
+@dataclass
 class RemoteConfig:
     default_host: str = ""
     ssh_port: int = 22
@@ -198,6 +277,11 @@ class Config:
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     accessibility: AccessibilityConfig = field(default_factory=AccessibilityConfig)
     commands: CommandsConfig = field(default_factory=CommandsConfig)
+    macros: MacrosConfig = field(default_factory=MacrosConfig)
+    revise: ReviseConfig = field(default_factory=ReviseConfig)
+    punch_in: PunchInConfig = field(default_factory=PunchInConfig)
+    endpoint: EndpointConfig = field(default_factory=EndpointConfig)
+    prosody: ProsodyConfig = field(default_factory=ProsodyConfig)
     remote: RemoteConfig = field(default_factory=RemoteConfig)
     emg: EmgConfig = field(default_factory=EmgConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
@@ -238,6 +322,11 @@ def load_config(path: Path | None = None) -> Config:
         filters=_load_filters(data),
         accessibility=AccessibilityConfig(**data.get("accessibility", {})),
         commands=CommandsConfig(**data.get("commands", {})),
+        macros=MacrosConfig(**data.get("macros", {})),
+        revise=ReviseConfig(**data.get("revise", {})),
+        punch_in=PunchInConfig(**data.get("punch_in", {})),
+        endpoint=EndpointConfig(**data.get("endpoint", {})),
+        prosody=ProsodyConfig(**data.get("prosody", {})),
         remote=RemoteConfig(**data.get("remote", {})),
         emg=_load_emg(data),
         learning=LearningConfig(**data.get("learning", {})),

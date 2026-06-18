@@ -21,3 +21,8 @@ fallback_to_clipboard = true
 
 [general]
 log_level = "INFO"
+
+[overlay]
+enabled = false            # set to true to show sonar rings near the cursor when you speak
+style = "sonar"            # sonar | dot
+position = "cursor"        # cursor | fixed

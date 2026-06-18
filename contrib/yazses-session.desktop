@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=YazSes Session Setup
+Comment=Import display environment into the YazSes systemd service at login
+Exec=systemctl --user import-environment DISPLAY XAUTHORITY WAYLAND_DISPLAY XDG_RUNTIME_DIR
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+StartupNotify=false

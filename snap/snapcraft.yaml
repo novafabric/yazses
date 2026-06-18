@@ -1,14 +1,13 @@
 name: yazses
 base: core24
-version: "0.4.0"
+version: "0.5.1"
 summary: Local, offline voice dictation for Linux
 description: |
   Hold Space anywhere on your desktop, speak, release — the transcribed
   text appears in whatever app is focused. No cloud, no GPU required.
   Powered by faster-whisper (CPU/int8, no GPU needed).
 
-  IMPORTANT: Requires classic confinement for /dev/input access (keyboard events).
-  Install with: sudo snap install yazses --classic
+  Install with: sudo snap install yazses
 
 title: YazSes
 contact: mohsen.seyedkazemi@gmail.com
@@ -18,15 +17,47 @@ source-code: https://github.com/novafabric/yazses
 issues: https://github.com/novafabric/yazses/issues
 
 grade: stable
-confinement: classic
+confinement: strict
 
 apps:
   yazses:
     command: bin/yazses-wrapper
+    plugs:
+      - audio-record
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
+      - home
+      - network
+      - opengl
   yazses-daemon:
     command: bin/yazses-daemon-wrapper
+    plugs:
+      - audio-record
+      - audio-playback
+      - desktop
+      - desktop-legacy
+      - x11
+      - wayland
+      - home
+      - network
+      - opengl
+  yazses-overlay:
+    command: bin/yazses-overlay-wrapper
+    plugs:
+      - desktop
+      - x11
+      - wayland
+      - opengl
   yazses-tray:
     command: bin/yazses-tray-wrapper
+    plugs:
+      - desktop
+      - x11
+      - wayland
+      - home
 
 parts:
   yazses:
@@ -41,6 +72,7 @@ parts:
       - libpython3.12-minimal
       - libpython3.12-stdlib
       - python3-pip-whl
+      - python3-xlib
     python-packages:
       - pip
     # snapcraft's python plugin runs a fix-python-shebang helper that searches
@@ -56,4 +88,8 @@ parts:
       fi
       install -Dm755 snap/local/yazses-wrapper "$CRAFT_PART_INSTALL/bin/yazses-wrapper"
       install -Dm755 snap/local/yazses-daemon-wrapper "$CRAFT_PART_INSTALL/bin/yazses-daemon-wrapper"
+      install -Dm755 snap/local/yazses-overlay-wrapper "$CRAFT_PART_INSTALL/bin/yazses-overlay-wrapper"
       install -Dm755 snap/local/yazses-tray-wrapper "$CRAFT_PART_INSTALL/bin/yazses-tray-wrapper"
+      # XDG autostart so the daemon's DISPLAY is populated on every graphical login
+      install -Dm644 contrib/yazses-session.desktop \
+        "$CRAFT_PART_INSTALL/etc/xdg/autostart/yazses-session.desktop"

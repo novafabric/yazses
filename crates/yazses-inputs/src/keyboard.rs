@@ -1,5 +1,8 @@
-use tracing::{debug, info, warn};
+use tracing::warn;
+#[cfg(target_os = "linux")]
+use tracing::{debug, info};
 
+#[cfg(target_os = "linux")]
 use crate::hold_detector::HoldDetector;
 use crate::protocol::{CalibrationArtifact, CalibrationSample, InputBackend, InputEvent, CAP_HOLD};
 

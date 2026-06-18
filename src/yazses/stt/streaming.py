@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,15 +42,20 @@ class StreamingEngine:
         self,
         model,                    # faster_whisper.WhisperModel
         partial_interval_ms: int = 300,
+        time_fn: Callable[[], float] | None = None,
     ) -> None:
         self._model = model
         self._interval_s = partial_interval_ms / 1000.0
+        self._time = time_fn or time.monotonic
         self._lock = threading.Lock()
         self._buffer: list[np.ndarray] = []
         self._prev_hypothesis: str = ""
         self._last_emitted: str = ""
         self._cumulative_chars: int = 0
         self._pending_partial: PartialHypothesis | None = None
+        # Monotonic time the LocalAgreement-confirmed prefix last changed; drives
+        # prefix_stable_for_ms() for Ghost Ahead endpoint anticipation.
+        self._prefix_changed_at: float = self._time()
         self._running = False
         self._thread: threading.Thread | None = None
 
@@ -60,6 +67,7 @@ class StreamingEngine:
         self._last_emitted = ""
         self._cumulative_chars = 0
         self._pending_partial = None
+        self._prefix_changed_at = self._time()
         self._thread = threading.Thread(target=self._decode_loop, daemon=True)
         self._thread.start()
 
@@ -100,7 +108,33 @@ class StreamingEngine:
             self._last_emitted = ""
             self._cumulative_chars = 0
             self._pending_partial = None
+            self._prefix_changed_at = self._time()
         self._running = False
+
+    def _note_prefix_change(self) -> None:
+        """Mark that the confirmed prefix just grew (resets the stability clock)."""
+        self._prefix_changed_at = self._time()
+
+    def prefix_stable_for_ms(self) -> float:
+        """Milliseconds since the LocalAgreement-confirmed prefix last changed.
+
+        Read-only signal for Ghost Ahead endpoint anticipation (spec-ghost-ahead):
+        a large value means the utterance content has flattened. No effect on the
+        decode loop.
+        """
+        return (self._time() - self._prefix_changed_at) * 1000.0
+
+    def prewarm(self) -> None:
+        """Eagerly decode the current buffer and discard the result (harmless).
+
+        Ghost Ahead Phase 1 pre-warm: on a likely endpoint, run a decode now so the
+        model/cache is warm for the authoritative commit on hold-release. Never
+        affects output — the result is thrown away. No-op if too little audio.
+        """
+        with self._lock:
+            audio = _concat(self._buffer)
+        if audio.size >= 3200:  # >= 0.2 s
+            self._decode_once(audio)
 
     def _decode_loop(self) -> None:
         import time
@@ -124,6 +158,7 @@ class StreamingEngine:
                         char_count=self._cumulative_chars,
                     )
                     self._last_emitted = stable_prefix
+                    self._prefix_changed_at = self._time()
                 self._prev_hypothesis = hypothesis
 
     def _decode_once(self, audio: np.ndarray) -> str:

@@ -16,12 +16,17 @@ trap "rm -rf $STAGING" EXIT
 
 echo "Building ${PKG}.deb ..."
 
-# Systemd service (system-wide, pointing to /usr/bin/yazses-daemon)
+# Systemd user service (system-wide path, absolute binary location)
 mkdir -p "$STAGING/usr/lib/systemd/user"
 sed 's|%h/.local/bin/yazses-daemon|/usr/bin/yazses-daemon|g' \
     contrib/yazses.service > "$STAGING/usr/lib/systemd/user/yazses.service"
 
-# Example config
+# XDG autostart — imports DISPLAY/XAUTHORITY into the systemd user manager at
+# every graphical login so PassEnvironment works on all desktop environments.
+mkdir -p "$STAGING/etc/xdg/autostart"
+cp contrib/yazses-session.desktop "$STAGING/etc/xdg/autostart/yazses-session.desktop"
+
+# Example config and install helper
 mkdir -p "$STAGING/usr/share/yazses"
 cp examples/config.example.toml "$STAGING/usr/share/yazses/"
 
@@ -88,8 +93,8 @@ fi
 EOF
 chmod 755 "$STAGING/DEBIAN/prerm"
 
-# Copy install.sh into the package for convenience
-cp install.sh "$STAGING/usr/share/yazses/install.sh"
+# Copy install helper into the package for convenience
+cp scripts/install-local.sh "$STAGING/usr/share/yazses/install.sh"
 
 dpkg-deb --build "$STAGING" "${PKG}.deb"
 echo "Built: ${PKG}.deb"

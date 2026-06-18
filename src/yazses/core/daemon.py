@@ -26,6 +26,8 @@ from yazses.audio.recorder import AudioRecorder
 from yazses.audio.vad_calibrated import is_silent_calibrated
 from yazses.commands.dispatch import dispatch as cmd_dispatch
 from yazses.commands.grammar import IntentType, classify
+from yazses.commands.macros import MacroContext, build_macro_table
+from yazses.commands.revise import DictationLedger, parse_revise
 from yazses.config import Config, load_config
 from yazses.inject.streaming import StreamingInjector
 from yazses.ipc.protocol import Request
@@ -34,9 +36,12 @@ from yazses.platform import Platform, get_platform
 from yazses.platform.base import HotkeyBackend, InjectorBackend, IpcServer, TrayState
 from yazses.postprocess.cleaner import clean_text
 from yazses.postprocess.llm_cleanup import LlmCleaner, build_cleaner
+from yazses.postprocess.prosody import Word, annotate
+from yazses.postprocess.punch_in import apply_top_candidate
 from yazses.postprocess.spacing import continuation_prefix
 from yazses.remote.forwarder import RemoteForwarder
 from yazses.remote.local_proxy import RemoteInjectorProxy
+from yazses.stt.endpoint import EndpointAnticipator
 from yazses.stt.faster_whisper import FasterWhisperEngine
 from yazses.stt.filters.disfluency import filter_transcript
 from yazses.stt.streaming import StreamingEngine
@@ -89,6 +94,16 @@ class Daemon:
         self._remote_injector: RemoteInjectorProxy | None = None
         self._stream_engine: StreamingEngine | None = None
         self._stream_injector: StreamingInjector | None = None
+        # Ghost Ahead endpoint anticipator (None when [endpoint] disabled — dormant).
+        self._endpoint: EndpointAnticipator | None = (
+            EndpointAnticipator(
+                min_silence_s=self._config.endpoint.min_silence_s,
+                stable_updates=self._config.endpoint.stable_updates,
+                debounce_s=self._config.endpoint.debounce_ms / 1000.0,
+            )
+            if self._config.endpoint.enabled
+            else None
+        )
         self._poll_stop: threading.Event | None = None
         self._poll_thread: threading.Thread | None = None
         # monotonic timestamp of the last dictation injection; drives
@@ -99,6 +114,12 @@ class Daemon:
         self._edit_watcher = None
         self._cleaner: LlmCleaner | None = None
         self._overlay_proc: subprocess.Popen | None = None
+        # Say-Macro table (None when [macros] disabled — feature dormant).
+        self._macro_table = build_macro_table(
+            self._config, self._platform.paths.config_file.parent
+        )
+        # Mid-Thought Undo: ledger of injected dictation bursts for "scratch that".
+        self._ledger = DictationLedger()
 
     # ---- Public entrypoints -----------------------------------------------
 
@@ -172,6 +193,9 @@ class Daemon:
             )
             log.info("Streaming STT enabled (partial every %d ms)", cfg.streaming.partial_interval_ms)
 
+        if self._endpoint is not None:
+            log.info("Endpoint anticipation enabled (pre-warm=%s)", cfg.endpoint.prewarm)
+
         self._recorder = AudioRecorder(
             cfg.audio.sample_rate,
             cfg.audio.max_record_seconds,
@@ -229,6 +253,7 @@ class Daemon:
         server.register("streaming_enable", self._handle_streaming_enable)
         server.register("streaming_disable", self._handle_streaming_disable)
         server.register("mark_last_wrong", self._handle_mark_last_wrong)
+        server.register("punch_in", self._handle_punch_in)
         server.serve_in_thread()
         self._ipc_server = server
 
@@ -335,10 +360,21 @@ class Daemon:
             )
 
             audio_secs = padded.size / self._config.audio.sample_rate
+            # Prosody Ink (batch only) needs per-word timestamps; capture them on
+            # the non-streaming path when [prosody] enabled, else use the fast
+            # path so non-prosody users never pay the word_timestamps cost.
+            prosody_words: list[Word] = []
+            want_prosody = self._config.prosody.enabled and not use_streaming
             t_decode = time.monotonic()
             if use_streaming:
                 assert self._stream_engine is not None
                 text = self._stream_engine.commit()
+            elif want_prosody:
+                text, prosody_words = self._engine.transcribe_words(
+                    padded,
+                    self._config.audio.sample_rate,
+                    initial_prompt=self._config.stt.initial_prompt or None,
+                )
             else:
                 text = self._engine.transcribe(
                     padded,
@@ -390,13 +426,44 @@ class Daemon:
             # no spacing, no dictation-timestamp update).
             intent = None
             if self._config.commands.enabled:
-                intent = classify(text, self._config.commands.profile)
+                intent = classify(text, self._config.commands.profile,
+                                   macro_table=self._macro_table)
                 event["intent_type"] = intent.intent.value
                 event["intent_action"] = intent.action
             is_dictation = intent is None or intent.intent == IntentType.DICTATE
 
+            # Mid-Thought Undo: a whole-utterance "scratch that" deletes the last
+            # burst YazSes injected (backspaces), instead of typing it literally.
+            if is_dictation and self._config.revise.enabled and parse_revise(text):
+                if use_streaming and stream_injector is not None:
+                    stream_injector.cancel()
+                n = self._ledger.scratch_last()
+                if n > 0:
+                    injector.inject_key_sequence(["BackSpace"] * n)
+                event["intent_type"] = "revise"
+                event["revise_chars"] = n
+                log.info("Mid-thought undo: scratched %d chars.", n)
+                return
+
             if is_dictation:
                 text = self._clean_dictation(text, event)
+                # Prosody Ink: map vocal prosody (inter-word pause, emphasis) onto
+                # text formatting. Batch + dictation only; word timings drive the
+                # spacing/emphasis, content stays the cleaned text. Off by default.
+                if want_prosody and prosody_words:
+                    presult = annotate(
+                        text, padded, sample_rate, prosody_words, self._config.prosody
+                    )
+                    if presult.latency_ms > self._config.prosody.max_latency_ms:
+                        log.warning(
+                            "Prosody pass took %.0f ms (> max_latency_ms %d); "
+                            "consider format=none (pause-only).",
+                            presult.latency_ms, self._config.prosody.max_latency_ms,
+                        )
+                    text = presult.text
+                    event["prosody_breaks"] = presult.paragraph_breaks
+                    event["prosody_emphasized"] = presult.emphasized
+                    event["final_text"] = text
                 # Prepend a separating space when this dictation continues a
                 # recent burst, so consecutive hold-to-talk utterances don't
                 # glue together at the boundary ("words together" + "I mean"
@@ -414,7 +481,9 @@ class Daemon:
                 assert intent is not None
                 if use_streaming and stream_injector is not None:
                     stream_injector.cancel()
-                cmd_dispatch(intent, injector)
+                cmd_dispatch(intent, injector,
+                             macro_table=self._macro_table,
+                             macro_context=self._build_macro_context())
             else:
                 if use_streaming:
                     assert stream_injector is not None
@@ -422,6 +491,8 @@ class Daemon:
                 else:
                     injector.inject(text)
                 self._last_dictation_monotonic = time.monotonic()
+                if self._config.revise.enabled:
+                    self._ledger.record(text)
 
         except Exception as exc:
             log.warning("Pipeline error: %s", exc)
@@ -473,7 +544,38 @@ class Daemon:
                     self._stream_injector.inject_partial(partial.text)
                 except Exception as exc:
                     log.warning("Partial inject error: %s", exc)
+            # Ghost Ahead: feed the confirmed-prefix stability to the anticipator so
+            # a likely endpoint pre-warms the decode path. Harmless; the real commit
+            # still happens on hold-release.
+            if self._endpoint is not None and self._stream_engine is not None:
+                silence_s = self._stream_engine.prefix_stable_for_ms() / 1000.0
+                self._endpoint_prewarm_tick(self._stream_engine._last_emitted, silence_s)
             stop.wait(timeout=0.05)
+
+    def _endpoint_prewarm_tick(
+        self, partial_text: str, silence_s: float, now: float | None = None
+    ) -> bool:
+        """Observe the endpoint signal; pre-warm the decode path on a likely stop.
+
+        Returns whether an endpoint fired. No-op (returns False) when [endpoint] is
+        disabled. Pre-warm is harmless — it eagerly decodes the streaming buffer and
+        discards the result; the authoritative transcript is unchanged.
+        """
+        if self._endpoint is None:
+            return False
+        if now is None:
+            now = time.monotonic()
+        fired = self._endpoint.observe(partial_text, silence_s, now=now)
+        if (
+            fired
+            and self._config.endpoint.prewarm
+            and self._stream_engine is not None
+        ):
+            try:
+                self._stream_engine.prewarm()
+            except Exception as exc:
+                log.debug("Endpoint pre-warm failed: %s", exc)
+        return fired
 
     def _clean_dictation(self, text: str, event: dict) -> str:
         """Apply optional LLM cleanup to dictation text; record it in *event*.
@@ -489,6 +591,84 @@ class Daemon:
             event["llm_cleaned_text"] = cleaned
             event["final_text"] = cleaned
         return cleaned
+
+    def _record_respeak(self) -> str:
+        """Record a short window and transcribe it — the respoken Punch-In phrase.
+
+        Bounded by ``[punch_in] record_seconds``. Reuses the daemon's own recorder
+        and STT engine; returns the cleaned transcript ("" if nothing usable).
+        """
+        if self._recorder is None or self._engine is None:
+            return ""
+        self._recorder.start()
+        window = max(0.0, self._config.punch_in.record_seconds)
+        if window:
+            time.sleep(window)
+        audio = self._recorder.stop()
+        if audio.size == 0:
+            return ""
+        text = self._engine.transcribe(audio, self._config.audio.sample_rate)
+        return clean_text(text)
+
+    def _handle_punch_in(self, request: Request) -> dict[str, object]:
+        """IPC: re-record a phrase and correct the last dictation burst (spec-punch-in)."""
+        if not self._config.punch_in.enabled:
+            return {"ok": False, "reason": "punch_in disabled in config"}
+        with self._lock:
+            ready = self._state.ready
+        if not ready:
+            return {"ok": False, "reason": "daemon still loading; try again in a moment"}
+        if not self._ledger.last_text():
+            return {"ok": False, "reason": "nothing to correct"}
+        respoken = str(request.params.get("respoken", "")) or self._record_respeak()
+        if not respoken:
+            return {"ok": False, "reason": "no respoken phrase captured"}
+        choose = int(request.params.get("choose", 0))
+        apply = bool(request.params.get("apply", True))
+        return self._apply_punch_in(respoken, choose=choose, apply=apply)
+
+    def _apply_punch_in(
+        self, respoken: str, choose: int = 0, apply: bool = True
+    ) -> dict[str, object]:
+        """Correct the last dictation burst by re-speaking part of it (spec-punch-in).
+
+        Aligns ``respoken`` against the last YazSes-injected burst, deletes that
+        burst (backspaces — works in any text field), retypes the corrected text,
+        and updates the ledger so a later "scratch that" still works. Returns a
+        result dict with ``ok``, ``old``/``new`` text, and the ranked ``candidates``
+        so the caller (CLI) can let the user confirm or pick a different span. With
+        ``apply=False`` it is a dry run: candidates and the proposed ``new`` text are
+        returned but nothing is injected. Never edits when there is no history or
+        nothing clears the similarity threshold.
+        """
+        last = self._ledger.last_text()
+        if not last:
+            return {"ok": False, "reason": "nothing to correct", "candidates": []}
+        corrected, cands = apply_top_candidate(
+            last,
+            respoken,
+            max_candidates=self._config.punch_in.max_candidates,
+            min_score=self._config.punch_in.min_score,
+            choose=choose,
+        )
+        cand_view = [
+            {"old": c.old_text, "new": c.new_text, "score": round(c.score, 3)}
+            for c in cands
+        ]
+        if corrected is None:
+            return {"ok": False, "reason": "no confident match", "candidates": cand_view}
+        if not apply:
+            return {
+                "ok": False, "applied": False, "old": last, "new": corrected,
+                "candidates": cand_view,
+            }
+        injector = self._active_injector()
+        injector.inject_backspaces(len(last))
+        injector.inject(corrected)
+        self._ledger.replace_last(corrected)
+        self._last_dictation_monotonic = time.monotonic()
+        log.info("Punch-In: corrected %d chars.", len(last))
+        return {"ok": True, "applied": True, "old": last, "new": corrected, "candidates": cand_view}
 
     def _active_injector(self) -> InjectorBackend:
         """Return remote injector when remote session is active, else local."""
@@ -644,6 +824,21 @@ class Daemon:
         return {"ok": flagged}
 
     # ---- Signals & helpers -------------------------------------------------
+
+    def _build_macro_context(self) -> MacroContext:
+        """Resolve dynamic macro placeholders at injection time.
+
+        date/time reflect the moment of dispatch. Clipboard capture is a P2
+        item (left empty in P1), so ``${clipboard}`` resolves to "" for now.
+        """
+        from datetime import datetime
+        now = datetime.now()
+        return MacroContext(
+            clipboard="",
+            date=now.strftime("%Y-%m-%d"),
+            time=now.strftime("%H:%M"),
+            author=self._config.macros.author,
+        )
 
     def _configure_logging(self) -> None:
         level_name = self._config.general.log_level.upper()

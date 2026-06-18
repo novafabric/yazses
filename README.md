@@ -106,6 +106,28 @@ Everything runs on your CPU. The LLM (Qwen3-7B by default) reads the transcript 
 
 ---
 
+## CLI commands
+
+| Command | Description |
+|---|---|
+| `yazses start` | Start the YazSes daemon in the background |
+| `yazses stop` | Stop the running daemon |
+| `yazses status` | Show daemon status — queries the daemon over IPC when reachable |
+| `yazses doctor` | Check system prerequisites (mic, AT-SPI, injection backend, permissions) |
+| `yazses enroll` | Calibrate your microphone — records 20 utterances to tune `vad_threshold` and `min_silence_ms` |
+| `yazses mic-level` | Measure mic speech level and recommend (or set with `--set`) the VAD threshold |
+| `yazses overlay` | Launch the sonar voice-activity overlay in the foreground (requires `overlay` extra) |
+| `yazses inject TEXT` | Type arbitrary text into the focused window — useful to test injection without speaking |
+| `yazses test` | End-to-end self-test: focuses a window and types `YazSes OK` to confirm injection works |
+| `yazses logs` | Show the daemon diagnostic log (metadata only — no dictated text is stored) |
+| `yazses mark-wrong` | Flag the last dictation as a misrecognition (feeds the learning corpus) |
+| `yazses tune` | Analyse the learning corpus and propose accuracy improvements; `--apply` to write changes |
+| `yazses corpus` | Manage the local learning corpus (`status`, `forget`, `destroy`) |
+| `yazses model` | Download and manage SLM intent-routing models |
+| `yazses remote HOST` | Forward voice typing to a remote host over SSH |
+
+---
+
 ## Configuration
 
 Config file location:

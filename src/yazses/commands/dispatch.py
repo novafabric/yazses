@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from yazses.commands.grammar import CommandIntent, IntentType
+from yazses.commands.macros import MacroContext, expand
 from yazses.platform.base import InjectorBackend
 
 log = logging.getLogger(__name__)
@@ -25,15 +26,17 @@ ACTION_KEYS: dict[str, list[str]] = {
 }
 
 
-def dispatch(intent: CommandIntent, injector: InjectorBackend, notify_fn=None) -> None:
+def dispatch(intent: CommandIntent, injector: InjectorBackend, notify_fn=None,
+             macro_table=None, macro_context=None) -> None:
     """Execute a CommandIntent via the injector.
 
     For DICTATE, calls injector.inject(raw_text).
+    For MACRO, expands the matched macro (via macro_table/macro_context) and injects.
     For all others, dispatches key sequences or shell commands.
     notify_fn(event_name, data) is called if provided (for IPC notifications).
     """
     try:
-        _execute(intent, injector)
+        _execute(intent, injector, macro_table, macro_context)
         if notify_fn and intent.intent != IntentType.DICTATE:
             notify_fn("command_dispatched", {
                 "intent": intent.intent.value,
@@ -46,9 +49,14 @@ def dispatch(intent: CommandIntent, injector: InjectorBackend, notify_fn=None) -
         injector.inject(intent.raw_text)
 
 
-def _execute(intent: CommandIntent, injector: InjectorBackend) -> None:
+def _execute(intent: CommandIntent, injector: InjectorBackend,
+             macro_table=None, macro_context=None) -> None:
     if intent.intent == IntentType.DICTATE:
         injector.inject(intent.raw_text)
+        return
+
+    if intent.intent == IntentType.MACRO:
+        _execute_macro(intent, injector, macro_table, macro_context)
         return
 
     action = intent.action
@@ -127,6 +135,24 @@ def _execute(intent: CommandIntent, injector: InjectorBackend) -> None:
     # Unknown action — fall back to raw text
     log.warning("No dispatch rule for action %r, injecting raw text", action)
     injector.inject(intent.raw_text)
+
+
+def _execute_macro(intent: CommandIntent, injector: InjectorBackend,
+                   macro_table, macro_context) -> None:
+    trigger = intent.args.get("trigger", "")
+    macro = macro_table.get(trigger) if macro_table is not None else None
+    if macro is None:
+        # Table missing or trigger gone — fall back to raw text.
+        injector.inject(intent.raw_text)
+        return
+    if macro.type == "actions":
+        # P1: OS/app action chains are parsed but dormant (land in P2).
+        log.info("macro %r is an action chain — deferred to P2, not firing", trigger)
+        return
+    text, cursor_offset = expand(macro, macro_context or MacroContext())
+    injector.inject(text)
+    if cursor_offset > 0:
+        injector.inject_key_sequence(["Left"] * cursor_offset)
 
 
 def _run_terminal(action: str, args: dict[str, str], injector: InjectorBackend) -> None:
