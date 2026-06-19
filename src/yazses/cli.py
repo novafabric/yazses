@@ -9,14 +9,64 @@ import typer
 
 from yazses.ipc.client import IpcUnreachableError
 from yazses.platform import get_platform
+from yazses.system.updater import check_update, run_upgrade
 
-app = typer.Typer(name="yazses", help="Local voice dictation daemon.")
+# `-h` is accepted everywhere alongside `--help`. Sub-apps each need their own
+# copy (Typer does not propagate context settings into added sub-typers).
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
-model_app = typer.Typer(name="model", help="Manage SLM intent-routing models.")
-app.add_typer(model_app)
+# rich help-panel section titles — group related commands in `yazses --help`
+# instead of one long flat list.
+_DAEMON = "Daemon"
+_DICTATION = "Dictation & correction"
+_SETUP = "Setup & calibration"
+_LEARNING = "Learning & tuning"
+_REMOTE = "Remote"
+_MAINT = "Updates & maintenance"
 
-corpus_app = typer.Typer(name="corpus", help="Manage the local learning corpus.")
-app.add_typer(corpus_app)
+def _examples(*lines: str) -> str:
+    """Build an Examples epilog. Lines are joined with blank lines so rich keeps
+    each on its own row (a single newline would be collapsed into a space)."""
+    return "[bold]Examples[/bold]\n\n" + "\n\n".join(lines)
+
+
+_APP_EPILOG = (
+    _examples(
+        "yazses start                 start dictating — hold the hotkey, speak, release",
+        "yazses status                is it running? show state, model, and hotkey",
+        "yazses doctor                check mic, keyboard, and injection prerequisites",
+        "yazses mic-level --set       calibrate the mic threshold to your voice",
+        "yazses test                  type a test phrase to confirm injection works",
+    )
+    + "\n\n[bold]Tab completion[/bold]\n\n"
+    + "yazses --install-completion  enable <Tab> completion for your shell\n\n"
+    + "yazses --show-completion     print the completion script to inspect/customise"
+)
+
+app = typer.Typer(
+    name="yazses",
+    help="Local, offline voice dictation — hold a key, speak, release.",
+    context_settings=CONTEXT_SETTINGS,
+    no_args_is_help=True,          # bare `yazses` shows help instead of an error
+    rich_markup_mode="rich",
+    epilog=_APP_EPILOG,
+)
+
+model_app = typer.Typer(
+    name="model",
+    help="Manage SLM intent-routing models (download / list).",
+    context_settings=CONTEXT_SETTINGS,
+    no_args_is_help=True,
+)
+app.add_typer(model_app, rich_help_panel=_SETUP)
+
+corpus_app = typer.Typer(
+    name="corpus",
+    help="Inspect or clear the local learning corpus.",
+    context_settings=CONTEXT_SETTINGS,
+    no_args_is_help=True,
+)
+app.add_typer(corpus_app, rich_help_panel=_LEARNING)
 
 
 def _version_callback(value: bool) -> None:
@@ -28,15 +78,23 @@ def _version_callback(value: bool) -> None:
 @app.callback()
 def _main(
     version: Optional[bool] = typer.Option(
-        None, "--version", callback=_version_callback, is_eager=True, help="Show version and exit."
+        None, "--version", "-V",
+        callback=_version_callback, is_eager=True, help="Show version and exit.",
     ),
 ) -> None:
     pass
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_DAEMON,
+    epilog=_examples("yazses start    start dictating — hold the hotkey, speak, release"),
+)
 def start() -> None:
-    """Start the YazSes daemon in the background."""
+    """Start the YazSes daemon in the background.
+
+    Loads the speech model once and listens for the hotkey. Under systemd you can
+    instead use `systemctl --user start yazses`.
+    """
     platform = get_platform()
     if platform.lifecycle.is_running():
         typer.echo("YazSes is already running.")
@@ -47,7 +105,7 @@ def start() -> None:
     typer.echo(f"YazSes started. Hold {platform.default_hotkey} to dictate.")
 
 
-@app.command()
+@app.command(rich_help_panel=_DAEMON)
 def stop() -> None:
     """Stop the running daemon."""
     platform = get_platform()
@@ -59,7 +117,10 @@ def stop() -> None:
     typer.echo("YazSes stopped.")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_DAEMON,
+    epilog=_examples("yazses status    show state, model, hotkey, and uptime"),
+)
 def status() -> None:
     """Show daemon status. Queries the daemon over IPC when reachable."""
     platform = get_platform()
@@ -85,15 +146,89 @@ def status() -> None:
         typer.echo(f"  last err: {info['last_error']}")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_SETUP,
+    epilog=_examples("yazses doctor    run this first if dictation isn't working"),
+)
 def doctor() -> None:
-    """Check system prerequisites."""
+    """Check system prerequisites and report what's OK / missing.
+
+    Verifies the platform, keyboard-capture and microphone permissions, the
+    session type (X11/Wayland) and its injection tools, the model cache, and any
+    configured extras (EMG port, prosody). Each line is OK / WARN / FAIL / SKIP.
+    """
     from yazses.system.doctor import run_doctor
 
     run_doctor()
 
 
-@app.command(name="mic-level")
+@app.command(
+    rich_help_panel=_MAINT,
+    epilog=_examples(
+        "yazses update           check for a newer version and offer to install it",
+        "yazses update --check   only report what's available (don't install)",
+        "yazses update --yes     install the update without asking",
+    ),
+)
+def update(
+    check: bool = typer.Option(
+        False, "--check", help="Only report whether an update is available; don't install."
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Install the update without prompting."
+    ),
+) -> None:
+    """Check for a newer YazSes and update it (snap / uv tool / pipx / pip).
+
+    Detects how YazSes was installed and checks the matching source — the tracked
+    snap channel for snap installs, PyPI for the pip-family ones — then upgrades
+    only when the available version is strictly newer (never a downgrade). After a
+    snap/pip upgrade, restart the daemon to load the new code:
+    `systemctl --user restart yazses` (or `yazses stop && yazses start`).
+    """
+    current = _pkg_version("yazses")
+    status = check_update(current)
+    typer.echo(f"Installed:  yazses {current}  (via {status.method})")
+
+    if status.latest is None:
+        typer.echo(f"Could not determine the latest version ({status.note}).", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"Available:  yazses {status.latest}")
+
+    if not status.available:
+        typer.echo("You're on the latest version. ✓")
+        return
+
+    typer.echo(f"\nUpdate available: {current} → {status.latest}")
+    typer.echo(f"Command: {' '.join(status.command)}")
+
+    if check:
+        typer.echo("\n(--check) Not installing. Re-run without --check to update.")
+        return
+
+    if not yes and not typer.confirm("Install it now?", default=True):
+        typer.echo("Skipped.")
+        return
+
+    code = run_upgrade(status)
+    if code == 0:
+        typer.echo(f"\nUpdated to {status.latest}. Restart the daemon to load it:")
+        typer.echo("  systemctl --user restart yazses   # or: yazses stop && yazses start")
+    else:
+        typer.echo(f"\nUpgrade command exited with code {code}.", err=True)
+        raise typer.Exit(code or 1)
+
+
+@app.command(
+    name="mic-level",
+    rich_help_panel=_SETUP,
+    epilog=_examples(
+        "yazses mic-level             measure and recommend a threshold",
+        "yazses mic-level --set       measure and write it to config.toml",
+        "yazses mic-level -s 6        record for 6 seconds instead of 4",
+    ),
+)
 def mic_level(
     seconds: float = typer.Option(4.0, "--seconds", "-s", help="Seconds to record while you speak."),
     set_threshold: bool = typer.Option(False, "--set", help="Write the recommended vad_threshold to config."),
@@ -134,7 +269,14 @@ def mic_level(
         typer.echo(f"  [accessibility]\n  vad_threshold = {rec}")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_SETUP,
+    epilog=_examples(
+        "yazses logs                  last 40 log lines",
+        "yazses logs -n 100           last 100 lines",
+        "yazses logs --path           just print the log file path",
+    ),
+)
 def logs(
     lines: int = typer.Option(40, "--lines", "-n", help="Number of recent lines to show."),
     path_only: bool = typer.Option(False, "--path", help="Print the log file path and exit."),
@@ -154,9 +296,12 @@ def logs(
     typer.echo(f"\n({log_file} -- follow live with: tail -f {log_file})")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_DICTATION,
+    epilog=_examples('yazses inject "hello world"    type it into the focused window'),
+)
 def inject(text: str = typer.Argument(..., help="Text to inject into the focused app.")) -> None:
-    """Test text injection without recording."""
+    """Type text into the focused window without recording (tests the injector)."""
     platform = get_platform()
     injector = platform.injector_factory()
     typer.echo(f"Backend: {type(injector).__name__}")
@@ -164,7 +309,7 @@ def inject(text: str = typer.Argument(..., help="Text to inject into the focused
     typer.echo(f"Injected: {text!r}")
 
 
-@app.command()
+@app.command(rich_help_panel=_DICTATION)
 def overlay() -> None:
     """Run the sonar voice-activity overlay (needs the `overlay` extra: PySide6).
 
@@ -177,7 +322,14 @@ def overlay() -> None:
     run_overlay()
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_REMOTE,
+    epilog=_examples(
+        "yazses remote dev.example.com           forward voice typing over SSH",
+        "yazses remote dev.example.com -p 2222   use a non-default SSH port",
+        "yazses remote dev.example.com --stop    disconnect the session",
+    ),
+)
 def remote(
     host: str = typer.Argument(..., help="SSH host to forward voice typing to."),
     port: int = typer.Option(22, "--port", "-p", help="SSH port."),
@@ -203,7 +355,7 @@ def remote(
         raise typer.Exit(1)
 
 
-@app.command()
+@app.command(rich_help_panel=_SETUP)
 def enroll() -> None:
     """Run the accessibility enrollment wizard to calibrate VAD thresholds.
 
@@ -241,7 +393,10 @@ def model_list() -> None:
         typer.echo("")
 
 
-@model_app.command("download")
+@model_app.command(
+    "download",
+    epilog=_examples("yazses model download qwen2.5-0.5b    download an SLM for intent routing"),
+)
 def model_download(
     model_id: str = typer.Argument(..., help="Model ID (see `yazses model list`)."),
 ) -> None:
@@ -261,7 +416,14 @@ def model_download(
         raise typer.Exit(1)
 
 
-@app.command(name="mark-wrong")
+@app.command(
+    name="mark-wrong",
+    rich_help_panel=_LEARNING,
+    epilog=_examples(
+        "yazses mark-wrong                      flag the last dictation as wrong",
+        'yazses mark-wrong -c "kubernetes pod"  flag it and attach the correct text',
+    ),
+)
 def mark_wrong(
     correction: str = typer.Option(
         "", "--correction", "-c", help="What you actually said (optional)."
@@ -286,7 +448,15 @@ def mark_wrong(
         raise typer.Exit(1)
 
 
-@app.command(name="punch-in")
+@app.command(
+    name="punch-in",
+    rich_help_panel=_DICTATION,
+    epilog=_examples(
+        "yazses punch-in              re-speak the phrase; correct the best match",
+        "yazses punch-in --dry-run    list candidate spans without editing",
+        "yazses punch-in --choose 1   apply the 2nd-ranked candidate",
+    ),
+)
 def punch_in(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="List candidate spans without editing (confirm first)."
@@ -322,7 +492,14 @@ def punch_in(
     raise typer.Exit(1)
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_LEARNING,
+    epilog=_examples(
+        "yazses tune                     dry-run: print proposed config changes",
+        "yazses tune --apply             review and write approved changes",
+        "yazses tune --no-retranscribe   skip the slower re-transcription pass",
+    ),
+)
 def tune(
     apply: bool = typer.Option(False, "--apply", help="Review and apply proposals interactively."),
     retranscribe: bool = typer.Option(
@@ -408,7 +585,10 @@ def corpus_status() -> None:
     typer.echo(f"  range:     {_fmt(s.oldest_ts)} → {_fmt(s.newest_ts)}")
 
 
-@corpus_app.command("forget")
+@corpus_app.command(
+    "forget",
+    epilog=_examples("yazses corpus forget -m 10    delete the last 10 minutes of events"),
+)
 def corpus_forget(
     minutes: float = typer.Option(..., "--minutes", "-m", help="Delete events from the last N minutes."),
 ) -> None:
@@ -446,7 +626,10 @@ def corpus_destroy(
     typer.echo("Learning corpus destroyed.")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=_DICTATION,
+    epilog=_examples("yazses test    focus an editor first, then watch for 'YazSes OK'"),
+)
 def test() -> None:
     """End-to-end self-test: confirm the injector works without speaking.
 

@@ -1,7 +1,4 @@
-import tomllib
-from pathlib import Path
-import pytest
-from yazses.config import Config, SttConfig, HotkeyConfig, AudioConfig, InjectionConfig, GeneralConfig, load_config
+from yazses.config import Config, load_config
 
 
 def test_defaults():
@@ -71,3 +68,35 @@ def test_overlay_section_override(tmp_path):
     assert cfg.overlay.accent == "#ff00aa"
     assert cfg.overlay.fps == 30
     assert cfg.overlay.react_to_voice is True   # default preserved
+
+
+# ---- Dysfluency-Friendly Mode config (ADR-015) ----------------------------
+
+def test_disfluency_collapse_defaults_off():
+    cfg = Config()
+    assert cfg.filters.disfluency.collapse_repetitions is False
+    assert cfg.filters.disfluency.collapse_prolongations is False
+    assert cfg.filters.disfluency.prolongation_min_run == 3
+    assert cfg.filters.disfluency.repetition_max_fragment_len == 2
+    assert cfg.accessibility.dysfluency_friendly is False
+
+
+def test_dysfluency_friendly_preset_enables_collapse(tmp_path):
+    f = tmp_path / "config.toml"
+    f.write_text("[accessibility]\ndysfluency_friendly = true\n")
+    cfg = load_config(f)
+    assert cfg.accessibility.dysfluency_friendly is True
+    assert cfg.filters.disfluency.collapse_repetitions is True
+    assert cfg.filters.disfluency.collapse_prolongations is True
+    assert cfg.accessibility.pre_speech_padding_ms >= 400
+
+
+def test_disfluency_collapse_explicit_override(tmp_path):
+    f = tmp_path / "config.toml"
+    f.write_text(
+        "[filters.disfluency]\ncollapse_prolongations = true\nprolongation_min_run = 4\n"
+    )
+    cfg = load_config(f)
+    assert cfg.filters.disfluency.collapse_prolongations is True
+    assert cfg.filters.disfluency.prolongation_min_run == 4
+    assert cfg.filters.disfluency.collapse_repetitions is False

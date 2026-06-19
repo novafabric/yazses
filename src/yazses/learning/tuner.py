@@ -11,7 +11,7 @@ from typing import Callable
 from yazses.config import Config
 from yazses.learning.analysis import (
     Proposal,
-    analyze,
+    analyze_validated,
     apply_proposal,
     compute_edit_signals,
     retranscribe,
@@ -45,7 +45,7 @@ def run_tune(
     if edits:
         echo(f"Inferred {len(edits)} likely correction(s) from follow-up dictations.")
 
-    proposals = analyze(store.events(), config)
+    proposals = analyze_validated(store.events(), config)
     if not proposals:
         echo("No tuning proposals — the corpus looks clean or is too small yet.")
         return []
@@ -53,7 +53,7 @@ def run_tune(
     echo(f"Found {len(proposals)} proposal(s):")
     applied: list[Proposal] = []
     for i, p in enumerate(proposals, 1):
-        echo(f"\n[{i}] {p.title}   (evidence: {p.evidence} event(s))")
+        echo(f"\n[{i}] {p.title}   (evidence: {p.evidence} event(s); {p.status})")
         echo(f"    {p.detail}")
         if p.target == "config":
             echo(f"    → config.toml: [{p.section}] {p.key} = {toml_literal(p.value)}")

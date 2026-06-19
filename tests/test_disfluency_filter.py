@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 import pytest
 from yazses.config import DisfluencyConfig
-from yazses.stt.filters.disfluency import filter_transcript, FilterResult
+from yazses.stt.filters.disfluency import filter_transcript
 
 CORPUS_PATH = Path(__file__).parent / "fixtures" / "disfluency" / "corpus.json"
 
@@ -79,3 +79,69 @@ def test_custom_filler_words():
     assert "actually" not in result.text
     assert "honestly" not in result.text
     assert "think this is good" in result.text
+
+
+# ---- Dysfluency-Friendly Mode: collapse passes (ADR-015) ------------------
+
+from yazses.stt.filters.disfluency import (  # noqa: E402
+    _collapse_prolongations,
+    _collapse_repetitions,
+)
+
+
+def test_collapse_prolongation_basic():
+    assert _collapse_prolongations("sooo good", 3) == "so good"
+
+
+def test_collapse_prolongation_leaves_double_letters():
+    assert _collapse_prolongations("see the tree", 3) == "see the tree"
+
+
+def test_collapse_prolongation_protects_caps_and_code():
+    assert _collapse_prolongations("HELLOOO obj.attr", 3) == "HELLOOO obj.attr"
+
+
+def test_collapse_prolongation_noop_below_min_run():
+    assert _collapse_prolongations("soo good", 3) == "soo good"
+
+
+def test_collapse_hyphen_false_start():
+    assert _collapse_repetitions("b-b-because i can", 2) == "because i can"
+
+
+def test_collapse_space_fragment_run():
+    assert _collapse_repetitions("st st stop now", 2) == "stop now"
+
+
+def test_collapse_unigram_triple():
+    assert _collapse_repetitions("the the the cat", 2) == "the cat"
+
+
+def test_repetition_preserves_intentional_hyphenation():
+    assert _collapse_repetitions("re-read the co-op file", 2) == "re-read the co-op file"
+
+
+def test_repetition_preserves_emphasis_pair():
+    assert _collapse_repetitions("very very good", 2) == "very very good"
+
+
+def test_repetition_protects_caps_and_code():
+    assert _collapse_repetitions("I I think foo_bar", 2) == "I I think foo_bar"
+
+
+# ---- Dysfluency collapse integrated into filter_transcript (ADR-015) ------
+
+def test_filter_default_does_not_collapse():
+    cfg = DisfluencyConfig()
+    assert filter_transcript("b-b-because sooo good", cfg).text == "b-b-because sooo good"
+
+
+def test_filter_collapses_when_enabled():
+    cfg = DisfluencyConfig(collapse_repetitions=True, collapse_prolongations=True)
+    assert filter_transcript("b-b-because it is sooo good", cfg).text == "because it is so good"
+
+
+def test_filter_collapse_respects_protection_end_to_end():
+    cfg = DisfluencyConfig(collapse_repetitions=True, collapse_prolongations=True)
+    out = filter_transcript("call FooBar and re-read obj.attr", cfg).text
+    assert "FooBar" in out and "re-read" in out and "obj.attr" in out

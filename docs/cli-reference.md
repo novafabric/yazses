@@ -2,7 +2,17 @@
 
 All commands are available as `yazses <command>` once installed globally
 (`uv tool install` / `pipx install`), or as `uv run yazses <command>` from the
-repo. Run `yazses --help` or `yazses <command> --help` for full option text.
+repo.
+
+**Getting help.** Every command and subcommand accepts both `-h` and `--help`;
+each shows its options plus an **Examples** block. `yazses --help` lists all
+commands grouped into panels (Daemon, Setup & calibration, Dictation &
+correction, Remote, Learning & tuning); bare `yazses` shows the same help.
+`yazses --version` / `-V` prints the version.
+
+**Tab completion.** Run `yazses --install-completion` once to enable `<Tab>`
+completion of commands and options in your shell (`yazses --show-completion`
+prints the script to inspect or customise).
 
 ## Daemon lifecycle
 
@@ -12,6 +22,17 @@ repo. Run `yazses --help` or `yazses <command> --help` for full option text.
 | `yazses stop` | Stop the running daemon (SIGTERM). |
 | `yazses status` | Show state, hotkey, model, injection backend, uptime (over IPC). |
 | `yazses-daemon` | Run the daemon in the **foreground** (logs to console) — useful for debugging. |
+
+## Updating
+
+| Command | Description |
+|---|---|
+| `yazses update` | Check for a newer version and offer to install it. Detects the install method and checks the matching source — the tracked **snap** channel for snap installs, **PyPI** for pip / pipx / uv-tool. Only upgrades when the available version is strictly newer (never a downgrade). |
+| `yazses update --check` | Only report what's available; don't install. |
+| `yazses update --yes` | Install the update without prompting. |
+
+After a successful update, restart the daemon to load it:
+`systemctl --user restart yazses` (or `yazses stop && yazses start`).
 
 ## Diagnostics & tuning
 
@@ -77,7 +98,7 @@ on the machine, encrypted at rest with a machine-bound key.
 
 | Command | Description |
 |---|---|
-| `yazses tune` | Analyse the captured corpus and **print** proposed config diffs (vocabulary, `vad_threshold`, model, disfluency rules, SLM few-shots). Dry-run; changes nothing. |
+| `yazses tune` | Analyse the captured corpus and **print** proposed config diffs (vocabulary, `vad_threshold`, model, disfluency rules, SLM few-shots). Each proposal is checked against a recent **held-out** slice of the corpus and labelled *validated (N/M held-out)* / *unverified* / *unvalidated (corpus too small)* (ADR-014); corroborated proposals are listed first. Dry-run; changes nothing. |
 | `yazses tune --apply` | Same, but review each proposal interactively and write approved ones to `config.toml` (comments preserved). |
 | `yazses tune --no-retranscribe` | Skip the larger-model re-transcription pass (faster; uses only flagged/edited signals). |
 | `yazses mark-wrong` | Flag the last dictation as a misrecognition (a learning signal). Routed through the running daemon. |
@@ -161,7 +182,9 @@ Enable with `[prosody] enabled = true`. A long inter-word pause becomes a
 paragraph break; with `format = "markdown"` and the `prosody` extra
 (`uv sync --extra prosody` → parselmouth) vocal emphasis becomes **bold**.
 `format = "none"` keeps paragraph breaks (universal whitespace) and drops bold.
-Dictation only; skipped on the streaming path.
+Dictation only; skipped on the streaming path. When enabled, `yazses doctor`
+reports whether the `prosody` extra is importable (WARN if missing — pause→¶ still
+works, only emphasis is disabled).
 
 ```toml
 [prosody]
@@ -171,6 +194,29 @@ pause_paragraph_ms = 700
 emphasis_enabled = true
 emphasis_sensitivity = 0.65
 max_latency_ms = 150       # above this, logs a warning and degrades to pause-only
+```
+
+## Dysfluency-Friendly Mode — clean stuttered / dysarthric dictation (off by default)
+
+Enable with `[accessibility] dysfluency_friendly = true`. The disfluency filter then
+collapses sub-word repetitions (`b-b-because` → `because`), short fragment runs
+(`b b because` → `because`), heavy unigram repeats (`the the the` → `the`), and
+prolongations (`sooo` → `so`) out of the final text — while protecting proper nouns,
+code identifiers, URLs, intentional hyphenation (`re-read`), and emphasis (`very very`).
+It also widens pre-speech padding for delayed voice onset. It does **not** change
+endpointing: YazSes is hold-to-talk, so you control when the utterance ends (ADR-015).
+Fully offline, no model training. When on, `yazses doctor` shows the mode's status.
+
+```toml
+[accessibility]
+dysfluency_friendly = true     # one switch: enables the collapse pass + wider onset padding
+
+# Fine-grained knobs (set individually instead of the preset if you prefer):
+[filters.disfluency]
+collapse_repetitions = true        # b-b-because / b b because / the the the
+collapse_prolongations = true      # sooo -> so
+prolongation_min_run = 3           # letter-run length that triggers collapse
+repetition_max_fragment_len = 2    # max length of a stutter "fragment"
 ```
 
 ## Ghost Ahead — endpoint pre-warm (off by default)

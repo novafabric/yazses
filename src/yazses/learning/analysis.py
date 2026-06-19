@@ -38,6 +38,21 @@ class Proposal:
     key: str | None = None
     value: object = None          # proposed value (number/string/list)
     examples: list[str] = field(default_factory=list)  # for few_shots target
+    # Held-out validation (ADR-014): corroborating events from a recent slice the
+    # proposal was NOT derived from. ``None`` = not evaluated (corpus too small).
+    holdout_support: int | None = None
+    holdout_size: int = 0
+
+    @property
+    def status(self) -> str:
+        """Human-readable validation verdict for display in `yazses tune`."""
+        if self.holdout_support is None:
+            return "unvalidated (corpus too small to hold out)"
+        if self.holdout_size == 0:
+            return "unvalidated (no distinct held-out data)"
+        if self.holdout_support > 0:
+            return f"validated ({self.holdout_support}/{self.holdout_size} held-out)"
+        return "unverified — no held-out corroboration"
 
 
 # --------------------------------------------------------------------------
@@ -206,6 +221,107 @@ def analyze(events: list[EventRecord], config: Config) -> list[Proposal]:
         proposals.append(p)
     # Strongest evidence first.
     proposals.sort(key=lambda x: x.evidence, reverse=True)
+    return proposals
+
+
+# --------------------------------------------------------------------------
+# Held-out validation (ADR-014)
+# --------------------------------------------------------------------------
+
+# Defaults: hold out the most recent fifth of the corpus, but only once there
+# are enough events that removing a slice still leaves a usable fit set.
+_DEFAULT_HOLDOUT_FRACTION = 0.2
+_DEFAULT_MIN_CORPUS = 20
+
+
+def _norm(text: str) -> str:
+    return " ".join(_tokens(text))
+
+
+def _holdout_support(proposal: Proposal, holdout: list[EventRecord], config: Config) -> int:
+    """Count held-out events that independently corroborate *proposal*.
+
+    Re-applies the same signal that produced the proposal to events it was never
+    derived from. A high count means the change reflects a stable pattern, not an
+    artefact of the data it was fit to.
+    """
+    if proposal.kind == "vocabulary":
+        new_terms = set(_tokens(str(proposal.value))) - set(_tokens(config.stt.initial_prompt))
+        n = 0
+        for e in holdout:
+            better = _better_text(e)
+            if not better:
+                continue
+            raw = set(_tokens(e.raw_text))
+            bt = set(_tokens(better))
+            if any(t in bt and t not in raw for t in new_terms):
+                n += 1
+        return n
+    if proposal.kind == "model":
+        return sum(
+            1 for e in holdout
+            if e.retx_distance is not None and e.retx_distance >= _MODEL_DISTANCE_TRIGGER
+        )
+    if proposal.kind == "vad_threshold":
+        return sum(1 for e in holdout if e.discard_reason == "silent" and e.level)
+    if proposal.kind == "disfluency":
+        existing = {w.lower() for w in config.filters.disfluency.filler_words}
+        proposed = proposal.value if isinstance(proposal.value, (list, tuple)) else []
+        new_fillers = {str(w).lower() for w in proposed} - existing
+        n = 0
+        for e in holdout:
+            flagged = e.wrong_flag or (e.edit_signal or 0) > 0
+            if not (flagged and e.correction_text):
+                continue
+            corrected = set(_tokens(e.correction_text))
+            if any(tok in new_fillers and tok not in corrected for tok in _tokens(e.raw_text)):
+                n += 1
+        return n
+    if proposal.kind == "few_shots":
+        return sum(
+            1 for e in holdout
+            if e.wrong_flag and e.intent_type and e.intent_type != "dictate" and e.raw_text
+        )
+    return 0
+
+
+def analyze_validated(
+    events: list[EventRecord],
+    config: Config,
+    *,
+    holdout_fraction: float = _DEFAULT_HOLDOUT_FRACTION,
+    min_corpus: int = _DEFAULT_MIN_CORPUS,
+) -> list[Proposal]:
+    """Like :func:`analyze`, but each proposal is checked on held-out events.
+
+    The corpus is ordered by time; the most recent ``holdout_fraction`` becomes a
+    held-out set, proposals are generated from the older remainder, and each is
+    re-scored on the held-out events it never saw (``Proposal.holdout_support`` /
+    ``holdout_size``). Below ``min_corpus`` events there is too little data to
+    split, so proposals are produced from the full set and left ``holdout_support
+    = None`` (status: "unvalidated"). See ADR-014.
+    """
+    events = list(events)
+    if len(events) < min_corpus:
+        # Too small to hold out; surface proposals but mark them unvalidated.
+        return analyze(events, config)
+
+    ordered = sorted(events, key=lambda e: e.ts)
+    k = max(1, int(len(ordered) * holdout_fraction))
+    fit, holdout = ordered[:-k], ordered[-k:]
+
+    # Leakage guard: a held-out event whose text duplicates a fit event would
+    # corroborate trivially — drop it so the split stays honest.
+    fit_texts = {_norm(_event_text(e)) for e in fit}
+    holdout = [e for e in holdout if _norm(_event_text(e)) not in fit_texts]
+
+    proposals = analyze(fit, config)
+    for p in proposals:
+        p.holdout_size = len(holdout)
+        p.holdout_support = _holdout_support(p, holdout, config)
+
+    # Corroborated proposals first, then by raw evidence.
+    proposals.sort(key=lambda p: (p.holdout_support or 0, p.evidence), reverse=True)
     return proposals
 
 

@@ -33,12 +33,18 @@ systemctl --user disable yazses.service 2>/dev/null || true
 info "Uninstalling previous uv tool installation..."
 uv tool uninstall yazses 2>/dev/null || true
 
+# Drop any cached yazses wheel. uv keys its build cache on the version string, so
+# a same-version source change (common during local iteration) would otherwise be
+# served stale — the installed code would not match the working tree.
+info "Clearing cached yazses build..."
+uv cache clean yazses 2>/dev/null || true
+
 # ── 3. Fresh install from local repo ────────────────────────────────────────
 info "Installing YazSes from $REPO_ROOT ..."
 if [[ $WITH_OVERLAY -eq 1 ]]; then
-    uv tool install --force --with "PySide6>=6.7" "$REPO_ROOT"
+    uv tool install --force --reinstall --with "PySide6>=6.7" "$REPO_ROOT"
 else
-    uv tool install --force "$REPO_ROOT"
+    uv tool install --force --reinstall "$REPO_ROOT"
 fi
 
 # ── 4. XDG autostart — makes DISPLAY available to the systemd user manager ──

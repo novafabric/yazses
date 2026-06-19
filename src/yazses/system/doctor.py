@@ -27,6 +27,38 @@ def _tool(label: str, *, required: bool) -> _Check:
     return (f"  {label}", "SKIP", "not needed on this session type")
 
 
+def _prosody_check(enabled: bool) -> _Check | None:
+    """Report whether the optional ``prosody`` extra (parselmouth) is importable.
+
+    Only runs when ``[prosody] enabled`` (spec-prosody-ink). Absent is a WARN, not
+    a FAIL: pause→paragraph still works with no dep; only emphasis→bold needs
+    parselmouth and degrades to pause-only when it is missing.
+    """
+    if not enabled:
+        return None
+    try:
+        import parselmouth  # type: ignore  # noqa: F401
+    except Exception:
+        return (
+            "prosody extra (parselmouth)",
+            "WARN",
+            "not installed — emphasis disabled, pause→¶ still works "
+            "(uv sync --extra prosody)",
+        )
+    return ("prosody extra (parselmouth)", "OK", "importable")
+
+
+def _dysfluency_check(enabled: bool) -> _Check | None:
+    """Report Dysfluency-Friendly Mode status (ADR-015). Skipped when off."""
+    if not enabled:
+        return None
+    return (
+        "Dysfluency-friendly mode",
+        "OK",
+        "on — collapsing repetitions/prolongations, wider onset padding",
+    )
+
+
 def run_doctor() -> None:
     platform = get_platform()
     perms = platform.permissions
@@ -94,6 +126,12 @@ def run_doctor() -> None:
             ))
         if cfg.emg.ble_address:
             checks.append(("EMG BLE address", "OK", cfg.emg.ble_address))
+        prosody = _prosody_check(cfg.prosody.enabled)
+        if prosody is not None:
+            checks.append(prosody)
+        dysfluency = _dysfluency_check(cfg.accessibility.dysfluency_friendly)
+        if dysfluency is not None:
+            checks.append(dysfluency)
     except Exception:
         pass
 

@@ -213,3 +213,102 @@ def _rec(**kw):
     )
     base.update(kw)
     return EventRecord(**base)
+
+
+# ---- held-out validation (ADR-014) ----------------------------------------
+
+# Distinct prefixes so consecutive events are not seen as re-dictations and each
+# event's text is unique (so the leakage guard does not drop them).
+_PREFIXES = [
+    "lets use", "deploy on", "scale up", "restart the", "check the",
+    "monitor the", "configure the", "update the", "patch the", "rollback the",
+    "inspect the", "drain the", "cordon the", "label the", "annotate the",
+]
+
+
+def _vocab_miss(i, *, missed="kubernetes", wrong="cubernetes"):
+    """An event where the live model mis-heard `missed` as `wrong`; the
+    correction supplies the right term. Each event's text is unique (node N)."""
+    pre = _PREFIXES[i % len(_PREFIXES)]
+    return _rec(
+        id=i, ts=1000.0 + i,
+        raw_text=f"{pre} {wrong} on node {i}",
+        correction_text=f"{pre} {missed} on node {i}",
+    )
+
+
+def _plain(i):
+    """A plain dictation event with no correction — corroborates nothing."""
+    pre = _PREFIXES[i % len(_PREFIXES)]
+    return _rec(id=i, ts=1000.0 + i, raw_text=f"{pre} the meeting notes for item {i}")
+
+
+def test_proposal_status_reports_three_states():
+    from yazses.learning.analysis import Proposal
+    p = Proposal(kind="vocabulary", title="t", detail="d", evidence=2)
+    assert "unvalidated" in p.status.lower()                      # holdout_support None
+    p.holdout_support, p.holdout_size = 0, 4
+    assert "unverified" in p.status.lower()
+    p.holdout_support, p.holdout_size = 3, 4
+    assert "validated" in p.status.lower() and "3/4" in p.status
+
+
+def test_analyze_validated_small_corpus_marks_unvalidated():
+    from yazses.learning.analysis import analyze_validated
+    cfg = Config()
+    events = [_vocab_miss(i) for i in range(3)]
+    proposals = analyze_validated(events, cfg, min_corpus=20)
+    vocab = next(p for p in proposals if p.kind == "vocabulary")
+    assert vocab.holdout_support is None
+    assert "unvalidated" in vocab.status.lower()
+
+
+def test_analyze_validated_marks_validated_when_corroborated():
+    from yazses.learning.analysis import analyze_validated
+    cfg = Config()
+    # 10 distinct events that all still mis-hear "kubernetes"; the most recent
+    # 3 land in the held-out set and must corroborate the vocabulary proposal.
+    events = [_vocab_miss(i) for i in range(10)]
+    proposals = analyze_validated(events, cfg, holdout_fraction=0.3, min_corpus=4)
+    vocab = next(p for p in proposals if p.kind == "vocabulary")
+    assert vocab.holdout_size == 3
+    assert vocab.holdout_support == 3
+    assert "validated (3/3" in vocab.status
+
+
+def test_analyze_validated_marks_unverified_when_holdout_disagrees():
+    from yazses.learning.analysis import analyze_validated
+    cfg = Config()
+    # Fit set still mis-hears the term, but recent (held-out) dictation is clean.
+    fit = [_vocab_miss(i) for i in range(7)]
+    holdout = [_plain(i) for i in range(7, 10)]
+    proposals = analyze_validated(fit + holdout, cfg, holdout_fraction=0.3, min_corpus=4)
+    vocab = next(p for p in proposals if p.kind == "vocabulary")
+    assert vocab.holdout_size == 3
+    assert vocab.holdout_support == 0
+    assert "unverified" in vocab.status.lower()
+
+
+def test_analyze_validated_leakage_guard_drops_duplicate_holdout_events():
+    from yazses.learning.analysis import analyze_validated
+    cfg = Config()
+    fit = [_vocab_miss(i) for i in range(7)]
+    # A held-out event that is a verbatim duplicate of fit[0] would corroborate,
+    # but must be dropped as leakage; two genuine plain events remain.
+    dup = _rec(id=20, ts=2000.0, raw_text=fit[0].raw_text,
+               correction_text=fit[0].correction_text)
+    holdout = [dup, _plain(21), _plain(22)]
+    proposals = analyze_validated(fit + holdout, cfg, holdout_fraction=0.3, min_corpus=4)
+    vocab = next(p for p in proposals if p.kind == "vocabulary")
+    # Duplicate excluded from the denominator → 2, not 3; and it cannot count.
+    assert vocab.holdout_size == 2
+    assert vocab.holdout_support == 0
+
+
+def test_analyze_validated_sorts_validated_first():
+    from yazses.learning.analysis import analyze_validated
+    cfg = Config()
+    events = [_vocab_miss(i) for i in range(10)]
+    proposals = analyze_validated(events, cfg, holdout_fraction=0.3, min_corpus=4)
+    supports = [p.holdout_support or 0 for p in proposals]
+    assert supports == sorted(supports, reverse=True)

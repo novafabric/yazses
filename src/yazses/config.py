@@ -73,6 +73,11 @@ class DisfluencyConfig:
         "no wait", "delete that", "scratch that", "never mind",
         "forget that", "strike that",
     ])
+    # v0.8.0 — Dysfluency-Friendly Mode collapse pass (ADR-015); off by default.
+    collapse_repetitions: bool = False      # b-b-because / b b because / the the the
+    collapse_prolongations: bool = False    # sooo -> so
+    prolongation_min_run: int = 3           # letter-run length that triggers collapse
+    repetition_max_fragment_len: int = 2    # max length of a stutter "fragment"
     llm_enabled: bool = False
     llm_endpoint: str = "http://localhost:11434"
     # Local GGUF model path for offline cleanup; empty falls back to the Ollama
@@ -103,6 +108,9 @@ class AccessibilityConfig:
     pre_speech_padding_ms: int = 200
     vad_source: str = "default"
     vad_threshold: float = 0.01
+    # v0.8.0 — Dysfluency-Friendly Mode master preset (ADR-015): enables the
+    # disfluency collapse pass and widens onset padding. Off by default.
+    dysfluency_friendly: bool = False
 
 
 @dataclass
@@ -312,7 +320,7 @@ def load_config(path: Path | None = None) -> Config:
         return Config()
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return Config(
+    cfg = Config(
         stt=SttConfig(**data.get("stt", {})),
         hotkey=HotkeyConfig(**data.get("hotkey", {})),
         audio=AudioConfig(**data.get("audio", {})),
@@ -332,3 +340,20 @@ def load_config(path: Path | None = None) -> Config:
         learning=LearningConfig(**data.get("learning", {})),
         overlay=OverlayConfig(**data.get("overlay", {})),
     )
+    return _apply_presets(cfg)
+
+
+def _apply_presets(cfg: Config) -> Config:
+    """Apply convenience presets that flip several keys from one switch.
+
+    Dysfluency-Friendly Mode (ADR-015): enable the disfluency collapse pass and
+    widen pre-speech padding for delayed voice onset. It does NOT alter
+    endpointing — YazSes is hold-to-talk, so the user controls utterance end.
+    """
+    if cfg.accessibility.dysfluency_friendly:
+        cfg.filters.disfluency.collapse_repetitions = True
+        cfg.filters.disfluency.collapse_prolongations = True
+        cfg.accessibility.pre_speech_padding_ms = max(
+            cfg.accessibility.pre_speech_padding_ms, 400
+        )
+    return cfg
