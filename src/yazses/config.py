@@ -111,6 +111,30 @@ class AccessibilityConfig:
     # v0.8.0 — Dysfluency-Friendly Mode master preset (ADR-015): enables the
     # disfluency collapse pass and widens onset padding. Off by default.
     dysfluency_friendly: bool = False
+    # v2 — Read-Back Loop (spec-read-back-loop): speak the final transcript back
+    # via offline TTS so dictation can be verified by ear. "off" (default) |
+    # "final" (P1: read the final transcript) | "confirm" (P2: full yes/no/redo
+    # loop). Requires [tts] enabled. confirm_timeout_s is the P2 listen window.
+    read_back: str = "off"
+    confirm_timeout_s: float = 6.0
+
+
+@dataclass
+class TtsConfig:
+    """v2 — offline text-to-speech for the Read-Back Loop (spec-read-back-loop).
+
+    OFF by default (ADR-011): nothing is imported or downloaded unless ``enabled``.
+    Permissive engines only — Kokoro-82M (Apache-2.0, default) / MeloTTS (MIT) /
+    KittenTTS (Apache-2.0); GPL Piper fork and XTTS are excluded. The TTS deps live
+    in the optional ``tts`` extra (kokoro-onnx, onnxruntime, soundfile).
+    """
+    enabled: bool = False
+    engine: str = "kokoro"            # kokoro | melo | kitten
+    voice: str = "default"
+    model_path: str = ""
+    sample_rate: int = 24000          # Kokoro native rate
+    speed: float = 1.0
+    max_readback_chars: int = 600     # truncate very long bursts with "…"
 
 
 @dataclass
@@ -294,6 +318,7 @@ class Config:
     emg: EmgConfig = field(default_factory=EmgConfig)
     learning: LearningConfig = field(default_factory=LearningConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
+    tts: TtsConfig = field(default_factory=TtsConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -339,6 +364,7 @@ def load_config(path: Path | None = None) -> Config:
         emg=_load_emg(data),
         learning=LearningConfig(**data.get("learning", {})),
         overlay=OverlayConfig(**data.get("overlay", {})),
+        tts=TtsConfig(**data.get("tts", {})),
     )
     return _apply_presets(cfg)
 

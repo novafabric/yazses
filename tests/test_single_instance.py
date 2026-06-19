@@ -1,0 +1,75 @@
+"""Single-instance lock — prevents the duplicate-daemon double-typing bug.
+
+Two YazSes daemons (the detached `yazses start` path + the systemd unit) could
+run at once, both grabbing the hotkey and injecting every burst twice. An
+exclusive file lock makes a second daemon refuse to start. The lock is advisory
+(flock), held for the process lifetime, and auto-released on exit/crash.
+"""
+from __future__ import annotations
+
+from yazses.system.single_instance import SingleInstanceLock
+
+
+def test_second_acquire_fails_while_first_holds(tmp_path):
+    path = str(tmp_path / "daemon.lock")
+    a = SingleInstanceLock(path)
+    b = SingleInstanceLock(path)
+    assert a.acquire() is True
+    assert b.acquire() is False          # another process/instance holds it
+    a.release()
+    assert b.acquire() is True           # released → now available
+    b.release()
+
+
+def test_same_instance_reacquire_is_idempotent(tmp_path):
+    a = SingleInstanceLock(str(tmp_path / "daemon.lock"))
+    assert a.acquire() is True
+    assert a.acquire() is True           # already held by us — still True, no conflict
+    a.release()
+
+
+def test_release_without_acquire_is_safe(tmp_path):
+    SingleInstanceLock(str(tmp_path / "daemon.lock")).release()  # must not raise
+
+
+def test_lock_file_records_pid(tmp_path):
+    import os
+
+    path = tmp_path / "daemon.lock"
+    lock = SingleInstanceLock(str(path))
+    assert lock.acquire() is True
+    assert path.read_text().strip() == str(os.getpid())
+    lock.release()
+
+
+def test_acquire_creates_missing_parent_dir(tmp_path):
+    lock = SingleInstanceLock(str(tmp_path / "nested" / "dir" / "daemon.lock"))
+    assert lock.acquire() is True
+    lock.release()
+
+
+# ---- daemon integration: a second daemon refuses to start -------------------
+
+def test_daemon_refuses_to_start_when_lock_held(tmp_path, monkeypatch):
+    """If another process holds the lock, the daemon's guard returns False."""
+    import types
+
+    from yazses.config import Config
+    from yazses.core.daemon import Daemon
+    from yazses.platform import get_platform
+
+    d = Daemon(config=Config(), platform=get_platform())
+    # Point the daemon's lock at an isolated path so the test never touches the
+    # real ~/.local/share/yazses state.
+    d._platform = types.SimpleNamespace(
+        paths=types.SimpleNamespace(data_dir=tmp_path),
+    )
+    holder = SingleInstanceLock(str(tmp_path / "daemon.lock"))
+    assert holder.acquire() is True
+    try:
+        assert d._acquire_instance_lock() is False   # second daemon refused
+    finally:
+        holder.release()
+    # Once released, a daemon can acquire it.
+    assert d._acquire_instance_lock() is True
+    d._instance_lock.release()

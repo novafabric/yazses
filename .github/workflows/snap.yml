@@ -3,7 +3,8 @@ name: Snap
 on:
   push:
     tags:
-      - "v0.*"  # Python v0.x only — v1.x handled by rust-release.yml
+      - "v0.*"
+      - "v1.*"  # Part 1 owns the 1.x line (Rust release workflow archived)
   workflow_dispatch:
     inputs:
       version:
@@ -45,6 +46,10 @@ jobs:
         run: ls -lh "${{ steps.snap-build.outputs.snap }}"
 
       - name: Upload .snap as workflow artefact
+        # Convenience copy only. Must not block the store publish below — when the
+        # account's Actions artifact-storage quota is full this step errors, which
+        # previously sank the whole job (and the publish with it).
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: yazses-snap-${{ github.sha }}

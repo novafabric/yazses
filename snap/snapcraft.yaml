@@ -1,6 +1,6 @@
 name: yazses
 base: core24
-version: "0.5.1"
+version: "1.0.0"
 summary: Local, offline voice dictation for Linux
 description: |
   Hold Space anywhere on your desktop, speak, release — the transcribed

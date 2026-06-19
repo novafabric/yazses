@@ -42,6 +42,7 @@ from yazses.postprocess.spacing import continuation_prefix
 from yazses.remote.forwarder import RemoteForwarder
 from yazses.remote.local_proxy import RemoteInjectorProxy
 from yazses.stt.endpoint import EndpointAnticipator
+from yazses.tts.factory import build_tts
 from yazses.stt.faster_whisper import FasterWhisperEngine
 from yazses.stt.filters.disfluency import filter_transcript
 from yazses.stt.streaming import StreamingEngine
@@ -113,6 +114,11 @@ class Daemon:
         self._corpus: CorpusWriter | None = None
         self._edit_watcher = None
         self._cleaner: LlmCleaner | None = None
+        # Read-Back Loop TTS backend (None when [tts] disabled — dormant).
+        self._tts = None
+        # Single-instance lock; prevents a second daemon (detached `yazses start`
+        # vs the systemd unit) from grabbing the hotkey and double-injecting.
+        self._instance_lock = None
         self._overlay_proc: subprocess.Popen | None = None
         # Say-Macro table (None when [macros] disabled — feature dormant).
         self._macro_table = build_macro_table(
@@ -123,8 +129,27 @@ class Daemon:
 
     # ---- Public entrypoints -----------------------------------------------
 
+    def _acquire_instance_lock(self) -> bool:
+        """Take the single-instance lock; False (and log) if a daemon already runs."""
+        from yazses.system.single_instance import SingleInstanceLock
+
+        self._instance_lock = SingleInstanceLock(
+            self._platform.paths.data_dir / "daemon.lock"
+        )
+        if not self._instance_lock.acquire():
+            log.error(
+                "Another YazSes daemon is already running — exiting. "
+                "Manage the daemon with: systemctl --user restart yazses "
+                "(avoid `yazses start`, which detaches a second one)."
+            )
+            return False
+        return True
+
     def run(self) -> None:
         self._configure_logging()
+        # Refuse to start a duplicate daemon (prevents double-typing).
+        if not self._acquire_instance_lock():
+            return
         self._install_signal_handlers()
 
         lifecycle = self._platform.lifecycle
@@ -240,6 +265,15 @@ class Daemon:
         # None unless [filters.disfluency] llm_enabled is set.
         self._cleaner = build_cleaner(cfg.filters.disfluency)
 
+        # Read-Back Loop: offline TTS that speaks the transcript back (ADR-011).
+        # None when [tts] disabled; NullTtsBackend when enabled-but-unavailable.
+        self._tts = build_tts(cfg.tts)
+        if self._tts is not None:
+            log.info(
+                "Read-back TTS enabled (backend=%s, mode=%s)",
+                self._tts.name, cfg.accessibility.read_back,
+            )
+
     def _start_ipc_server(self) -> None:
         socket_path = self._platform.paths.ipc_socket
         server = self._platform.ipc_server_factory(socket_path)
@@ -254,12 +288,20 @@ class Daemon:
         server.register("streaming_disable", self._handle_streaming_disable)
         server.register("mark_last_wrong", self._handle_mark_last_wrong)
         server.register("punch_in", self._handle_punch_in)
+        server.register("readback_speak", self._handle_readback_speak)
         server.serve_in_thread()
         self._ipc_server = server
 
     # ---- Pipeline callbacks -----------------------------------------------
 
     def _on_hold_start(self, leaked: int) -> None:
+        # Barge-in: a new hold during read-back cancels TTS playback immediately
+        # so the user's speech is never recorded over the spoken transcript.
+        if self._tts is not None:
+            try:
+                self._tts.cancel()
+            except Exception:
+                pass
         with self._lock:
             self._state.state = TrayState.RECORDING
         log.info("Recording started (cleaning up %d leaked char(s))", leaked)
@@ -493,6 +535,8 @@ class Daemon:
                 self._last_dictation_monotonic = time.monotonic()
                 if self._config.revise.enabled:
                     self._ledger.record(text)
+                # Read-Back Loop: speak the final transcript back (dictation only).
+                self._maybe_read_back(text)
 
         except Exception as exc:
             log.warning("Pipeline error: %s", exc)
@@ -670,6 +714,58 @@ class Daemon:
         log.info("Punch-In: corrected %d chars.", len(last))
         return {"ok": True, "applied": True, "old": last, "new": corrected, "candidates": cand_view}
 
+    def _handle_readback_speak(self, request: Request) -> dict[str, object]:
+        """IPC: speak arbitrary text via the TTS backend (`yazses say "..."`)."""
+        text = str(request.params.get("text", "")).strip()
+        if not text:
+            return {"ok": False, "reason": "empty text"}
+        if self._tts is None:
+            return {"ok": False, "reason": "TTS disabled — set [tts] enabled = true"}
+        self._speak_readback(text)
+        return {"ok": True, "backend": self._tts.name}
+
+    def _maybe_read_back(self, text: str) -> None:
+        """Speak the final dictation transcript back when read-back is enabled.
+
+        Gated by ``[tts] enabled`` (``self._tts`` is None when dormant) and
+        ``[accessibility] read_back != "off"``. Very long bursts are truncated to
+        ``[tts] max_readback_chars`` (with an ellipsis). Commands are never read
+        back — only this dictation path calls it.
+        """
+        if self._tts is None or self._config.accessibility.read_back == "off":
+            return
+        rb = text
+        cap = self._config.tts.max_readback_chars
+        if cap and len(rb) > cap:
+            rb = rb[:cap].rstrip() + "…"
+        if rb:
+            self._speak_readback(rb)
+
+    def _speak_readback(self, text: str) -> None:
+        """Enter READBACK and speak *text* on a background thread.
+
+        Runs off the hotkey loop so playback never blocks recording. The recorder
+        is push-to-talk, so TTS audio is never auto-captured (echo-loop interlock);
+        a hold during playback is treated as barge-in in ``_on_hold_start``.
+        """
+        if self._tts is None:
+            return
+        with self._lock:
+            self._state.state = TrayState.READBACK
+        tts = self._tts
+
+        def _run() -> None:
+            try:
+                tts.speak(text)
+            except Exception as exc:
+                log.debug("Read-back error: %s", exc)
+            finally:
+                with self._lock:
+                    if self._state.state == TrayState.READBACK:
+                        self._state.state = TrayState.IDLE
+
+        threading.Thread(target=_run, daemon=True, name="readback").start()
+
     def _active_injector(self) -> InjectorBackend:
         """Return remote injector when remote session is active, else local."""
         with self._lock:
@@ -694,6 +790,8 @@ class Daemon:
                 "platform": self._platform.name,
                 "streaming_enabled": self._config.streaming.enabled,
                 "commands_enabled": self._config.commands.enabled,
+                "read_back": self._config.accessibility.read_back,
+                "tts_backend": self._tts.name if self._tts is not None else None,
                 "remote_connected": self._remote_forwarder is not None and self._remote_forwarder.is_connected(),
                 # For the voice-activity overlay (yazses-overlay).
                 "audio_level": round(self._state.audio_level, 6),
@@ -878,6 +976,11 @@ class Daemon:
         return self._platform.default_hotkey if key == "auto" else key
 
     def _shutdown(self) -> None:
+        if self._instance_lock is not None:
+            try:
+                self._instance_lock.release()
+            except Exception:
+                log.exception("Instance lock release raised")
         if self._overlay_proc is not None:
             try:
                 self._overlay_proc.terminate()

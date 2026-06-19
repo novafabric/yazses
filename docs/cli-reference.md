@@ -55,6 +55,7 @@ After a successful update, restart the daemon to load it:
 | `yazses punch-in` | Re-speak just the wrong phrase to correct the last dictation burst. Records a short window, aligns it against the last burst, deletes it and retypes it corrected. Requires `[punch_in] enabled = true`. |
 | `yazses punch-in --dry-run` | List candidate spans without editing, so you can confirm first. |
 | `yazses punch-in --choose N` | Apply the candidate at rank `N` (0 = best match). |
+| `yazses say "text"` | Speak text aloud through the offline TTS voice (Read-Back Loop). Requires `[tts] enabled = true`. |
 
 ## Voice-activity overlay (sonar)
 
@@ -217,6 +218,26 @@ collapse_repetitions = true        # b-b-because / b b because / the the the
 collapse_prolongations = true      # sooo -> so
 prolongation_min_run = 3           # letter-run length that triggers collapse
 repetition_max_fragment_len = 2    # max length of a stutter "fragment"
+```
+
+## Read-Back Loop — hear your dictation (off by default)
+
+Enable with `[tts] enabled = true` and `[accessibility] read_back = "final"`, then
+install the offline voice: `uv sync --extra tts` (Kokoro-82M, Apache-2.0). After
+each dictation YazSes speaks the transcript back so you can verify by ear — useful
+eyes-free or with low vision. Commands are never read back. `yazses say "text"`
+speaks arbitrary text on demand. A hold during playback barges in (stops the voice).
+
+```toml
+[tts]
+enabled = true
+engine = "kokoro"          # kokoro (default) | melo | kitten
+voice = "default"
+speed = 1.0
+max_readback_chars = 600   # longer bursts are truncated with "…"
+
+[accessibility]
+read_back = "final"        # off (default) | final | confirm (P2: spoken yes/no/redo)
 ```
 
 ## Ghost Ahead — endpoint pre-warm (off by default)

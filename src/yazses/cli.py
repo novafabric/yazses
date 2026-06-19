@@ -309,6 +309,30 @@ def inject(text: str = typer.Argument(..., help="Text to inject into the focused
     typer.echo(f"Injected: {text!r}")
 
 
+@app.command(
+    rich_help_panel=_DICTATION,
+    epilog=_examples('yazses say "hello there"    speak text aloud via offline TTS'),
+)
+def say(text: str = typer.Argument(..., help="Text to speak aloud.")) -> None:
+    """Speak text aloud through the offline TTS voice (Read-Back Loop).
+
+    Requires `[tts] enabled = true` (install the voice with `uv sync --extra tts`).
+    Routes through the running daemon so it reuses the loaded TTS backend.
+    """
+    platform = get_platform()
+    client = platform.ipc_client_factory(platform.paths.ipc_socket)
+    try:
+        result = client.call("readback_speak", text=text)
+    except IpcUnreachableError:
+        typer.echo("Daemon is not running. Start it with: yazses start", err=True)
+        raise typer.Exit(1)
+    if result.get("ok"):
+        typer.echo(f"Speaking via {result.get('backend')}...")
+    else:
+        typer.echo(f"Could not speak: {result.get('reason')}", err=True)
+        raise typer.Exit(1)
+
+
 @app.command(rich_help_panel=_DICTATION)
 def overlay() -> None:
     """Run the sonar voice-activity overlay (needs the `overlay` extra: PySide6).

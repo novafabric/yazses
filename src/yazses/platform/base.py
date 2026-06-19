@@ -30,6 +30,7 @@ class TrayState(str, Enum):
     RECORDING = "recording"
     TRANSCRIBING = "transcribing"
     INJECTING = "injecting"
+    READBACK = "readback"            # speaking the transcript back via offline TTS
     PAUSED = "paused"
     ERROR = "error"
     REMOTE_SETUP = "remote_setup"    # establishing SSH tunnel

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yazses"
-version = "0.9.0"
+version = "1.0.0"
 description = "Local, offline voice dictation for Linux, macOS, and Windows — hold a key, speak, release"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -81,6 +81,11 @@ overlay = [
 prosody = [
     "praat-parselmouth>=0.4.6",
 ]
+tts = [
+    "kokoro-onnx>=0.4.9",
+    "onnxruntime>=1.20",
+    "soundfile>=0.13",
+]
 all = [
     "llama-cpp-python>=0.3.23",
     "pygls>=2.1.1",
@@ -89,6 +94,9 @@ all = [
     "bleak>=3.0.2",
     "PySide6>=6.8",
     "praat-parselmouth>=0.4.6",
+    "kokoro-onnx>=0.4.9",
+    "onnxruntime>=1.20",
+    "soundfile>=0.13",
 ]
 
 [dependency-groups]

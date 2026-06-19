@@ -3,7 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - "v0.*"  # Python v0.x only — v1.x tags are handled by rust-release.yml
+      - "v0.*"
+      - "v1.*"  # Part 1 owns the 1.x line (Rust release workflow archived)
+  workflow_dispatch: {}  # allow a manual re-publish from main (e.g. after a CI fix)
 
 permissions:
   contents: write
@@ -34,6 +36,11 @@ jobs:
     needs: test
     environment: pypi
     permissions:
+      # A job-level permissions block REPLACES the defaults, so contents:read
+      # must be listed explicitly or actions/checkout cannot clone this private
+      # repo ("repository not found", exit 128). This is why PyPI publishing
+      # silently broke from v0.5.1 onward.
+      contents: read
       id-token: write  # required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +58,9 @@ jobs:
 
   release-linux:
     # Builds the .deb, creates the GitHub Release, and uploads the artifact
-    # so the APT repo workflow can download it.
+    # so the APT repo workflow can download it. Tag pushes only — a manual
+    # workflow_dispatch from main just re-publishes to PyPI.
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     needs: test
     steps:
