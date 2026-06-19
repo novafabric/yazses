@@ -4,9 +4,32 @@
 [![PyPI](https://img.shields.io/pypi/v/yazses)](https://pypi.org/project/yazses/)
 [![Snap Store](https://snapcraft.io/en/dark/install.svg)](https://snapcraft.io/yazses)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 
-**Hold a key → speak → release.** An on-device AI agent types text, commits code, controls media, takes notes, and more — entirely offline. No cloud. No API key. No subscription.
+**Hold a key → speak → release.** On-device voice dictation that types into any app, plus voice commands and macros — entirely offline. No cloud. No API key. No subscription.
+
+---
+
+## Two versions of YazSes
+
+This repo holds **one product** with **two implementations** — not two separate apps, but two generations of the same idea. The one you install and run is **Part 1 (Python)**, on this `main` branch.
+
+| | **Part 1 — Python** · `main` | **Rust HCI exploration** · `archive/rust-hci-v1` |
+|---|---|---|
+| What it is | The shipping app — voice dictation, commands, macros | An early-stage rewrite exploring deeper **human–computer interaction**: an on-device *agent* (LLM tool-use, personal memory, editor awareness) |
+| Status | ✅ **Active — current product** (v0.9.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
+| Hold-to-talk dictation | ✅ | ✅ |
+| Offline STT | ✅ faster-whisper | ✅ Whisper + Moonshine v2 (~9 ms) |
+| Voice commands → key sequences | ✅ regex grammar (+ optional SLM router) | ✅ via LLM tool-calls |
+| Voice macros · Mid-Thought Undo · Punch-In · Prosody Ink · Ghost Ahead | ✅ | ❌ |
+| Dysfluency-Friendly Mode · learning corpus + `yazses tune` | ✅ | ❌ |
+| Friendly CLI (`-h`, examples, `yazses update`) | ✅ | ❌ |
+| On-device **LLM agent** (20 tools: git commit, media, notes, screenshots…) | ❌ (optional offline text cleanup only) | ✅ |
+| **Personal memory** (encrypted on-device vector store) | ❌ | ✅ |
+| Editor context (Neovim / VS Code) | ✅ LSP context, opt-in | ✅ 5-tier window detection + bridges |
+| Screen-reader accessibility (AT-SPI / NVDA) | ❌ | ✅ |
+| Packaged & distributed (PyPI, snap, APT, …) | ✅ | ❌ |
+
+**Bottom line:** if you want YazSes, use **Part 1** (this branch). The Rust branch is kept only for reference — nothing on `main` builds, installs, or depends on it. The Rust effort aimed at a more ambitious agentic HCI layer but was left in early stages; revisiting it is a deliberate future decision, not part of day-to-day work here.
 
 ---
 
@@ -231,30 +254,25 @@ winget install NovaFabric.YazSes
 
 ## Development
 
-### Rust (v1.0 — default)
+YazSes (Part 1) is a Python project managed with `uv`:
 
 ```bash
 git clone https://github.com/novafabric/yazses
 cd yazses
-cargo build
-cargo test --workspace
+uv sync
+uv run python -m pytest tests/ -v
+bash scripts/install-local.sh        # install locally + run as a user service
 ```
 
-Optional backends:
+### Rust HCI exploration (archived)
 
-| Flag | Enables |
-|---|---|
-| `--features whisper` | whisper.cpp STT |
-| `--features moonshine` | Moonshine v2 streaming STT |
-| `--features llama-cpp` | llama.cpp LLM |
-| `--features ollama` | Ollama HTTP LLM |
-| `--features silero` | Silero neural VAD |
-
-### Python (v0.4.x)
+The early-stage Rust rewrite lives on the **`archive/rust-hci-v1`** branch, not on
+`main`. It is not built or installed by anything here — see *Two versions of
+YazSes* above for what it does and doesn't have. To look at it:
 
 ```bash
-uv sync
-uv run pytest tests/ -v
+git checkout archive/rust-hci-v1
+cargo build && cargo test --workspace   # optional backends: whisper, moonshine, llama-cpp, ollama, silero
 ```
 
 ---
