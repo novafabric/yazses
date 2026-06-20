@@ -23,6 +23,11 @@ class HotkeyConfig:
     hold_threshold_ms: int = 500
     source: str = "default"
     evdev_device: str = ""
+    # Optional dedicated *command* key. Empty = single-key mode (commands are
+    # auto-detected on the dictation key). When set to a different key, holding
+    # it forces command mode: whatever you say is parsed as a command and never
+    # typed as literal text (an unrecognised phrase is ignored, not inserted).
+    command_key: str = ""
 
 
 @dataclass
@@ -202,6 +207,85 @@ class ReviseConfig:
 
 
 @dataclass
+class GazeConfig:
+    """v2 — Glance-Type (spec-glance-type), P1 look-to-pane (design/v2-cognitive-layer §3.3).
+
+    Glance at a coarse screen zone to target where the next dictation lands. Webcam
+    gaze is coarse (~3-5 cm), so this is look-to-PANE, not look-to-caret. OFF by
+    default; needs a webcam + a one-time calibration. The gaze backend lives in the
+    optional ``gaze`` extra (l2cs-net + mediapipe + opencv); frames are processed
+    in-RAM during a hold and never stored or sent (ADR-011).
+    """
+    enabled: bool = False
+    backend: str = "l2cs"             # l2cs | none
+    zones: str = "grid3x3"            # grid3x3 | grid2x2 | windows
+    camera_index: int = 0
+    calibration_points: int = 9
+    confidence_min: float = 0.5
+
+
+@dataclass
+class CocktailConfig:
+    """v2 — Cocktail Filter (spec-cocktail-filter), P1 personal-VAD gate (§3.2).
+
+    Drop audio frames that aren't the enrolled target speaker, so an interfering
+    voice never enters the transcript. OFF by default; requires an enrolled
+    voiceprint (else dormant). ``mode="suppress"`` (P2) is gated on an open model.
+    """
+    enabled: bool = False
+    mode: str = "gate"                # gate (P1) | suppress (P2, gated on a model)
+    target_threshold: float = 0.5     # per-window target-speaker cosine score to keep
+    window_ms: int = 500              # window the gate scores (ECAPA needs ~0.5s+)
+
+
+@dataclass
+class PersonalizeConfig:
+    """v2 — Voiceprint Mind (spec-voiceprint-mind), P1 biasing (§3.1).
+
+    Personalize STT to the user. P1 (this): compose ``initial_prompt`` from the user
+    vocabulary + frequent personal n-grams mined from the corpus — nearly free, no
+    training. P2 (``lora``): an opt-in nightly LoRA personal fine-tune (train→merge→
+    ct2-convert), gated on a held-out WER win. OFF by default.
+    """
+    enabled: bool = False
+    bias_from_corpus: bool = True
+    max_prompt_terms: int = 64
+    lora: bool = False                # P2 master switch (training is heavy)
+    lora_base_model: str = "small.en"
+    lora_min_events: int = 200
+
+
+@dataclass
+class PolyglotConfig:
+    """v2 — Polyglot Switch (spec-polyglot-switch), P0 scaffolding (§3.4).
+
+    Transcribe code-switched speech for one configured pair (e.g. "fa-en"). Needs a
+    trained CS adapter (stock Whisper can't code-switch); dormant until ``adapter_path``
+    is set. OFF by default.
+    """
+    enabled: bool = False
+    pair: str = ""
+    adapter_path: str = ""
+    lid: str = "segment"
+    mer_gate: float = 0.0
+
+
+@dataclass
+class VoiceprintConfig:
+    """v2 shared infra — speaker enrollment + embedding (design/v2-cognitive-layer).
+
+    A one-time enrollment produces a speaker embedding (d-vector) used by
+    Cocktail Filter (target-speaker gate) and Voiceprint Mind (personalization).
+    OFF by default; the embedder lives in the optional ``voiceprint`` extra and is
+    imported only when enabled. The embedding is biometric → stored only in the
+    encrypted learning corpus (ADR-012), never plaintext, never leaves the machine.
+    """
+    enabled: bool = False
+    backend: str = "ecapa"            # ecapa (speechbrain) | resemblyzer
+    enroll_seconds: float = 25.0      # speech captured during enrollment
+
+
+@dataclass
 class PunchInConfig:
     """v2 — Punch-In (spec-punch-in), P1 alignment core.
 
@@ -319,6 +403,11 @@ class Config:
     learning: LearningConfig = field(default_factory=LearningConfig)
     overlay: OverlayConfig = field(default_factory=OverlayConfig)
     tts: TtsConfig = field(default_factory=TtsConfig)
+    voiceprint: VoiceprintConfig = field(default_factory=VoiceprintConfig)
+    gaze: GazeConfig = field(default_factory=GazeConfig)
+    cocktail: CocktailConfig = field(default_factory=CocktailConfig)
+    personalize: PersonalizeConfig = field(default_factory=PersonalizeConfig)
+    polyglot: PolyglotConfig = field(default_factory=PolyglotConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -365,6 +454,11 @@ def load_config(path: Path | None = None) -> Config:
         learning=LearningConfig(**data.get("learning", {})),
         overlay=OverlayConfig(**data.get("overlay", {})),
         tts=TtsConfig(**data.get("tts", {})),
+        voiceprint=VoiceprintConfig(**data.get("voiceprint", {})),
+        gaze=GazeConfig(**data.get("gaze", {})),
+        cocktail=CocktailConfig(**data.get("cocktail", {})),
+        personalize=PersonalizeConfig(**data.get("personalize", {})),
+        polyglot=PolyglotConfig(**data.get("polyglot", {})),
     )
     return _apply_presets(cfg)
 

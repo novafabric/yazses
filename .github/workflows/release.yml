@@ -75,6 +75,10 @@ jobs:
           bash scripts/build-deb.sh
 
       - name: Upload .deb artifact
+        # Feeds the APT repo workflow. Non-blocking so a full Actions
+        # artifact-storage quota (or a build-dir hiccup) can't sink the whole
+        # release — the GitHub Release below still gets created.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: deb-package

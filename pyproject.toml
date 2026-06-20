@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "yazses"
-version = "1.0.0"
+version = "1.2.0"
 description = "Local, offline voice dictation for Linux, macOS, and Windows — hold a key, speak, release"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -86,6 +86,15 @@ tts = [
     "onnxruntime>=1.20",
     "soundfile>=0.13",
 ]
+# v2 cognitive layer — speaker voiceprint (Cocktail Filter + Voiceprint Mind)
+voiceprint = [
+    "speechbrain>=1.1",
+]
+# v2 cognitive layer — Glance-Type look-to-pane (webcam gaze).
+# NOTE: l2cs pins an older torch that conflicts with a unified resolution, so it
+# is intentionally NOT declared here — install manually when enabling gaze:
+#   pip install "l2cs>=2.0" "mediapipe>=0.10" "opencv-python>=4.10"
+# The gaze backend imports them at runtime; absent → look-to-pane stays dormant.
 all = [
     "llama-cpp-python>=0.3.23",
     "pygls>=2.1.1",
@@ -97,6 +106,7 @@ all = [
     "kokoro-onnx>=0.4.9",
     "onnxruntime>=1.20",
     "soundfile>=0.13",
+    "speechbrain>=1.1",
 ]
 
 [dependency-groups]
@@ -111,4 +121,8 @@ dev = [
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
+# Include the whole package. `artifacts` un-ignores src/yazses/overlay/ in case a
+# broad `overlay/` VCS-ignore rule (snapcraft's build dir) would otherwise drop it
+# — without the force-include that double-added overlay/__init__.py and broke the build.
 packages = ["src/yazses"]
+artifacts = ["src/yazses/overlay/**"]

@@ -15,7 +15,11 @@ warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[x]${NC} $*"; exit 1; }
 
 WITH_OVERLAY=0
-for arg in "$@"; do [[ "$arg" == "--with-overlay" ]] && WITH_OVERLAY=1; done
+WITH_VOICEPRINT=0
+for arg in "$@"; do
+    [[ "$arg" == "--with-overlay" ]] && WITH_OVERLAY=1
+    [[ "$arg" == "--with-voiceprint" ]] && WITH_VOICEPRINT=1
+done
 
 # ── 1. Detect X11/Wayland display ───────────────────────────────────────────
 DETECTED_DISPLAY="${DISPLAY:-}"
@@ -41,11 +45,17 @@ uv cache clean yazses 2>/dev/null || true
 
 # ── 3. Fresh install from local repo ────────────────────────────────────────
 info "Installing YazSes from $REPO_ROOT ..."
-if [[ $WITH_OVERLAY -eq 1 ]]; then
-    uv tool install --force --reinstall --with "PySide6>=6.7" "$REPO_ROOT"
-else
-    uv tool install --force --reinstall "$REPO_ROOT"
+EXTRA_WITH=()
+[[ $WITH_OVERLAY -eq 1 ]] && EXTRA_WITH+=(--with "PySide6>=6.7")
+if [[ $WITH_VOICEPRINT -eq 1 ]]; then
+    # Speaker voiceprint (Cocktail Filter / Voiceprint Mind). Pin CPU torch wheels
+    # (UV_TORCH_BACKEND=cpu) — the default CUDA build is ~5GB and ships a torch
+    # that mismatches torchaudio, breaking the ECAPA embedder.
+    info "Including the voiceprint extra (speechbrain + CPU torch)..."
+    export UV_TORCH_BACKEND=cpu
+    EXTRA_WITH+=(--with "speechbrain>=1.1" --with "torchaudio")
 fi
+uv tool install --force --reinstall "${EXTRA_WITH[@]}" "$REPO_ROOT"
 
 # ── 4. XDG autostart — makes DISPLAY available to the systemd user manager ──
 # This runs at every graphical login and is the reliable cross-DE fix so that

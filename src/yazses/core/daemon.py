@@ -86,6 +86,11 @@ class Daemon:
         self._state = _DaemonState()
         self._lock = threading.RLock()
         self._hotkey: HotkeyBackend | None = None
+        # Optional dedicated command key (force-command mode). Runs its own
+        # listener in a background thread; _command_mode is set while held.
+        self._command_hotkey: HotkeyBackend | None = None
+        self._command_thread: threading.Thread | None = None
+        self._command_mode: bool = False
         self._injector: InjectorBackend | None = None
         self._engine: FasterWhisperEngine | None = None
         self._recorder: AudioRecorder | None = None
@@ -116,6 +121,10 @@ class Daemon:
         self._cleaner: LlmCleaner | None = None
         # Read-Back Loop TTS backend (None when [tts] disabled — dormant).
         self._tts = None
+        # v2 cognitive layer: speaker embedder + enrolled voiceprint (Cocktail Filter).
+        # None when [voiceprint]/[cocktail] dormant or unavailable.
+        self._embedder = None
+        self._voiceprint = None
         # Single-instance lock; prevents a second daemon (detached `yazses start`
         # vs the systemd unit) from grabbing the hotkey and double-injecting.
         self._instance_lock = None
@@ -169,6 +178,15 @@ class Daemon:
             assert self._hotkey is not None
             log.info("YazSes ready. Hold %s to dictate.", self._resolved_hotkey())
             self._maybe_launch_overlay()
+            # Run the optional command-key listener in the background; the
+            # dictation listener owns the main thread (blocking) as before.
+            if self._command_hotkey is not None:
+                self._command_thread = threading.Thread(
+                    target=self._command_hotkey.run,
+                    daemon=True,
+                    name="command-hotkey",
+                )
+                self._command_thread.start()
             self._hotkey.run()
         finally:
             self._shutdown()
@@ -190,6 +208,11 @@ class Daemon:
 
     def shutdown(self) -> None:
         log.info("Shutting down.")
+        if self._command_hotkey is not None:
+            try:
+                self._command_hotkey.stop()
+            except Exception:
+                log.exception("Command-hotkey stop raised")
         if self._hotkey is not None:
             try:
                 self._hotkey.stop()
@@ -242,6 +265,10 @@ class Daemon:
             self._on_hold_end,
         )
 
+        # Optional dedicated command key: a second listener that forces command
+        # mode while held. Ignored if unset or the same as the dictation key.
+        self._command_hotkey = self._make_command_hotkey(cfg, key_id)
+
         # Opt-in self-improvement corpus (ADR-012). Dormant unless enabled.
         self._corpus = build_writer(self._platform.paths.data_dir, cfg.learning)
 
@@ -274,6 +301,39 @@ class Daemon:
                 self._tts.name, cfg.accessibility.read_back,
             )
 
+        # Cocktail Filter / Voiceprint Mind: build the speaker embedder and load the
+        # enrolled voiceprint when either feature is on (dormant/None otherwise).
+        if cfg.cocktail.enabled or cfg.voiceprint.enabled:
+            from yazses.voiceprint.factory import build_embedder
+            from yazses.voiceprint.store import load_voiceprint
+
+            self._embedder = build_embedder(cfg.voiceprint)
+            self._voiceprint = self._load_voiceprint_vector()
+            if self._embedder is None:
+                log.warning(
+                    "Voiceprint enabled but the `voiceprint` extra is missing; "
+                    "Cocktail Filter stays dormant (uv sync --extra voiceprint)."
+                )
+            elif self._voiceprint is None:
+                log.warning("No enrolled voiceprint yet; run `yazses enroll-voice`.")
+            _ = load_voiceprint  # referenced via the helper below
+
+    def _voiceprint_path(self):
+        return self._platform.paths.data_dir / "voiceprint.enc"
+
+    def _load_voiceprint_vector(self):
+        """Load the enrolled speaker embedding vector, or None if not enrolled."""
+        try:
+            from yazses.learning.crypto import Cipher, load_or_create_key
+            from yazses.voiceprint.store import load_voiceprint
+
+            cipher = Cipher(load_or_create_key(self._platform.paths.data_dir))
+            emb = load_voiceprint(self._voiceprint_path(), cipher)
+            return emb.vector if emb is not None else None
+        except Exception as exc:
+            log.debug("Voiceprint load failed: %s", exc)
+            return None
+
     def _start_ipc_server(self) -> None:
         socket_path = self._platform.paths.ipc_socket
         server = self._platform.ipc_server_factory(socket_path)
@@ -294,6 +354,32 @@ class Daemon:
 
     # ---- Pipeline callbacks -----------------------------------------------
 
+    def _make_command_hotkey(self, cfg, dictation_key_id: str):
+        """Build the dedicated command-key backend, or None when not configured.
+
+        Returns None when ``[hotkey] command_key`` is empty or equal to the
+        dictation key (a second listener on the same key would be redundant).
+        """
+        command_key = (cfg.hotkey.command_key or "").strip()
+        if not command_key or command_key.lower() == dictation_key_id.lower():
+            return None
+        log.info("Command key enabled: hold %s for command mode.", command_key)
+        return self._platform.hotkey_factory(
+            command_key,
+            cfg.hotkey.hold_threshold_ms,
+            self._on_command_hold_start,
+            self._on_command_hold_end,
+        )
+
+    def _on_command_hold_start(self, leaked: int) -> None:
+        """Hold-start for the dedicated command key — arm force-command mode."""
+        self._command_mode = True
+        self._on_hold_start(leaked)
+
+    def _on_command_hold_end(self) -> None:
+        """Hold-end for the command key. `_on_hold_end` consumes _command_mode."""
+        self._on_hold_end()
+
     def _on_hold_start(self, leaked: int) -> None:
         # Barge-in: a new hold during read-back cancels TTS playback immediately
         # so the user's speech is never recorded over the spoken transcript.
@@ -311,7 +397,11 @@ class Daemon:
             except Exception as exc:
                 log.warning("Failed to clean %d leaked char(s): %s", leaked, exc)
 
-        if self._stream_engine is not None and self._config.streaming.enabled:
+        if (
+            self._stream_engine is not None
+            and self._config.streaming.enabled
+            and not self._command_mode  # commands never stream-type live
+        ):
             self._stream_engine.start()
             # Seed with pre-speech padding so voice onset isn't lost
             if self._padding_buffer is not None:
@@ -344,6 +434,10 @@ class Daemon:
 
     def _on_hold_end(self) -> None:
         log.info("Recording stopped, transcribing...")
+
+        # Consume the dedicated-command-key flag for this burst (reset for next).
+        command_mode = self._command_mode
+        self._command_mode = False
 
         # Stop streaming poll before touching the injector state
         self._streaming_active = False
@@ -395,12 +489,23 @@ class Daemon:
                     stream_injector.cancel()
                 return
 
+            # Cocktail Filter: drop frames that aren't the enrolled target speaker
+            # before STT, so an interfering voice never enters the transcript.
+            padded = self._maybe_cocktail_gate(padded)
+            if padded.size == 0:
+                event["discard_reason"] = "cocktail_gated"
+                log.info("Cocktail Filter gated out all audio (no target speaker).")
+                if stream_injector is not None:
+                    stream_injector.cancel()
+                return
+
             use_streaming = (
                 self._config.streaming.enabled
                 and self._stream_engine is not None
                 and stream_injector is not None
             )
 
+            bias_prompt = self._effective_initial_prompt()
             audio_secs = padded.size / self._config.audio.sample_rate
             # Prosody Ink (batch only) needs per-word timestamps; capture them on
             # the non-streaming path when [prosody] enabled, else use the fast
@@ -415,13 +520,13 @@ class Daemon:
                 text, prosody_words = self._engine.transcribe_words(
                     padded,
                     self._config.audio.sample_rate,
-                    initial_prompt=self._config.stt.initial_prompt or None,
+                    initial_prompt=bias_prompt,
                 )
             else:
                 text = self._engine.transcribe(
                     padded,
                     self._config.audio.sample_rate,
-                    initial_prompt=self._config.stt.initial_prompt or None,
+                    initial_prompt=bias_prompt,
                 )
             decode_ms = (time.monotonic() - t_decode) * 1000.0
             event["raw_text"] = text
@@ -466,13 +571,32 @@ class Daemon:
             # Classify first so we know whether this burst is dictation (which
             # gets cleanup + continuation spacing) or a command (key sequence —
             # no spacing, no dictation-timestamp update).
+            #
+            # Command mode (dedicated command key held): always parse as a
+            # command and NEVER type literal text — an unrecognised phrase is
+            # ignored. Otherwise: auto-detect on the shared dictation key.
             intent = None
-            if self._config.commands.enabled:
+            if command_mode:
                 intent = classify(text, self._config.commands.profile,
-                                   macro_table=self._macro_table)
+                                  macro_table=self._macro_table)
+                event["command_mode"] = True
                 event["intent_type"] = intent.intent.value
                 event["intent_action"] = intent.action
-            is_dictation = intent is None or intent.intent == IntentType.DICTATE
+                if intent.intent == IntentType.DICTATE:
+                    event["discard_reason"] = "command_unmatched"
+                    log.info("Command mode: no command matched %d-char phrase; "
+                             "ignoring (not typed).", len(text))
+                    if stream_injector is not None:
+                        stream_injector.cancel()
+                    return
+                is_dictation = False
+            else:
+                if self._config.commands.enabled:
+                    intent = classify(text, self._config.commands.profile,
+                                       macro_table=self._macro_table)
+                    event["intent_type"] = intent.intent.value
+                    event["intent_action"] = intent.action
+                is_dictation = intent is None or intent.intent == IntentType.DICTATE
 
             # Mid-Thought Undo: a whole-utterance "scratch that" deletes the last
             # burst YazSes injected (backspaces), instead of typing it literally.
@@ -620,6 +744,64 @@ class Daemon:
             except Exception as exc:
                 log.debug("Endpoint pre-warm failed: %s", exc)
         return fired
+
+    def _effective_initial_prompt(self) -> str | None:
+        """The STT ``initial_prompt``, biased toward the user (Voiceprint Mind P1).
+
+        When ``[personalize] enabled``, the configured ``[stt] initial_prompt`` is
+        extended with the user's vocabulary (``YAZSES_VOCABULARY``), so the
+        recognizer favours their jargon/proper nouns. Off → the configured prompt.
+        """
+        from yazses.personalize.prompt_builder import build_prompt
+        from yazses.stt.vocabulary import merge_initial_prompt
+        from yazses.system.vocabulary import load_vocab, vocab_path
+
+        base = self._config.stt.initial_prompt or ""
+        # The user's explicit dictionary (`yazses vocab add`) + YAZSES_VOCABULARY —
+        # always applied so hard-to-recognise names are spelled right (independent
+        # of [personalize], which gates only the future corpus-mining bias).
+        words = load_vocab(vocab_path(self._platform.paths.config_file.parent))
+        raw = os.environ.get("YAZSES_VOCABULARY", "")
+        words += [t.strip() for t in raw.split(",") if t.strip()]
+        if words:
+            base = build_prompt(
+                words, [], existing_prompt=base,
+                max_terms=self._config.personalize.max_prompt_terms,
+            ) or base
+        # Always prime the coined app name so Whisper spells "YazSes".
+        return merge_initial_prompt(base)
+
+    def _maybe_cocktail_gate(self, audio: np.ndarray) -> np.ndarray:
+        """Drop non-target-speaker frames before STT (Cocktail Filter P1).
+
+        No-op unless ``[cocktail] enabled`` in ``gate`` mode AND an enrolled
+        voiceprint + a speaker embedder are available (else returns *audio*
+        unchanged). Never raises — a gate error degrades to passing the audio through.
+        """
+        cfg = self._config.cocktail
+        if (
+            not cfg.enabled
+            or cfg.mode != "gate"
+            or self._embedder is None
+            or self._voiceprint is None
+        ):
+            return audio
+        from yazses.audio.personal_vad import gate
+
+        sr = self._config.audio.sample_rate
+        target = self._voiceprint
+
+        def embed_frame(frame: np.ndarray) -> np.ndarray:
+            return self._embedder.embed(frame, sr).vector
+
+        try:
+            return gate(
+                audio, target, embed_frame,
+                sample_rate=sr, window_ms=cfg.window_ms, threshold=cfg.target_threshold,
+            )
+        except Exception as exc:
+            log.debug("Cocktail gate error: %s", exc)
+            return audio
 
     def _clean_dictation(self, text: str, event: dict) -> str:
         """Apply optional LLM cleanup to dictation text; record it in *event*.

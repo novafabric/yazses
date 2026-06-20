@@ -69,6 +69,22 @@ corpus_app = typer.Typer(
 app.add_typer(corpus_app, rich_help_panel=_LEARNING)
 
 
+def _resolved_hotkey(platform) -> str:
+    """The hotkey the daemon will actually bind: the configured ``[hotkey] key``
+    when present, else the platform default. CLI messages should reflect what the
+    user configured, not the bare platform default."""
+    try:
+        from yazses.config import load_config
+
+        # Pass the path directly: load_config returns defaults when it doesn't
+        # exist. (Passing None would fall back to the *default* user config path,
+        # which may differ from this platform's config_file.)
+        cfg = load_config(platform.paths.config_file)
+        return cfg.hotkey.key or platform.default_hotkey
+    except Exception:
+        return platform.default_hotkey
+
+
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"yazses {_pkg_version('yazses')}")
@@ -85,24 +101,368 @@ def _main(
     pass
 
 
+def _kill_yazses_daemons(sig) -> int:
+    """Linux: signal every yazses daemon process (systemd + detached `yazses.main`).
+
+    Returns the count signalled. The detached `yazses start` path reparents to the
+    systemd user manager and survives `systemctl stop`, so a clean restart must hunt
+    them by command line, not just the PID file.
+    """
+    import os
+    import subprocess
+    import sys
+
+    if sys.platform != "linux":
+        return 0
+    # Exclude this process AND the shell that launched us, so a command line that
+    # happens to contain the pattern can never get itself killed.
+    safe = {os.getpid(), os.getppid()}
+    killed = 0
+    # Precise patterns ([.] = literal dot) — match only the real daemon invocations
+    # (`…/bin/yazses-daemon` and `python -m yazses.main`), never `yazses restart` etc.
+    for pat in ("bin/yazses-daemon", "yazses[.]main"):
+        try:
+            out = subprocess.run(["pgrep", "-f", pat], capture_output=True, text=True)
+        except Exception:
+            continue
+        for tok in out.stdout.split():
+            try:
+                pid = int(tok)
+            except ValueError:
+                continue
+            if pid not in safe:
+                try:
+                    os.kill(pid, sig)
+                    killed += 1
+                except ProcessLookupError:
+                    pass
+    return killed
+
+
+def _systemd_managed() -> bool:
+    import subprocess
+    import sys
+
+    if sys.platform != "linux":
+        return False
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "list-unit-files", "yazses.service"],
+            capture_output=True, text=True,
+        )
+        return "yazses.service" in r.stdout
+    except Exception:
+        return False
+
+
+def _restart_daemon(platform) -> None:
+    """Stop ALL daemons (no duplicates) and start exactly one."""
+    import signal
+    import time
+
+    if _systemd_managed():
+        try:
+            __import__("subprocess").run(["systemctl", "--user", "stop", "yazses"])
+        except Exception:
+            pass
+    pid = platform.lifecycle.read_pid()
+    if pid:
+        try:
+            platform.lifecycle.stop_daemon(pid)
+        except Exception:
+            pass
+    _kill_yazses_daemons(signal.SIGTERM)
+    time.sleep(1)
+    _kill_yazses_daemons(signal.SIGKILL)  # force any survivor
+    try:
+        (platform.paths.data_dir / "daemon.lock").unlink(missing_ok=True)
+    except Exception:
+        pass
+    platform.lifecycle.clear_pid()
+    if _systemd_managed():
+        __import__("subprocess").run(["systemctl", "--user", "start", "yazses"])
+    else:
+        platform.lifecycle.start_daemon_detached()
+
+
 @app.command(
     rich_help_panel=_DAEMON,
     epilog=_examples("yazses start    start dictating — hold the hotkey, speak, release"),
 )
 def start() -> None:
-    """Start the YazSes daemon in the background.
+    """Start the YazSes daemon (restarts cleanly if one is already running).
 
-    Loads the speech model once and listens for the hotkey. Under systemd you can
-    instead use `systemctl --user start yazses`.
+    Loads the speech model once and listens for the hotkey. If a daemon is already
+    running this **restarts** it (killing any stray duplicates) rather than spawning
+    a second one — so you never end up double-typing.
     """
     platform = get_platform()
     if platform.lifecycle.is_running():
-        typer.echo("YazSes is already running.")
-        raise typer.Exit(1)
-    # Clear any stale PID file left by a crashed daemon.
+        typer.echo("YazSes is already running — restarting it cleanly...")
+        _restart_daemon(platform)
+        typer.echo(f"YazSes restarted. Hold {_resolved_hotkey(platform)} to dictate.")
+        return
     platform.lifecycle.clear_pid()
     platform.lifecycle.start_daemon_detached()
-    typer.echo(f"YazSes started. Hold {platform.default_hotkey} to dictate.")
+    typer.echo(f"YazSes started. Hold {_resolved_hotkey(platform)} to dictate.")
+
+
+@app.command(
+    rich_help_panel=_DAEMON,
+    epilog=_examples("yazses restart    stop every daemon and start exactly one"),
+)
+def restart() -> None:
+    """Restart the daemon — kills any stray/duplicate daemons and starts exactly one.
+
+    Use this if dictation is being typed twice (a sign of duplicate daemons).
+    """
+    platform = get_platform()
+    _restart_daemon(platform)
+    typer.echo(f"YazSes restarted. Hold {_resolved_hotkey(platform)} to dictate.")
+
+
+features_app = typer.Typer(
+    name="features",
+    help="See capabilities and turn them on/off (no config-editing needed).",
+    context_settings=CONTEXT_SETTINGS,
+    invoke_without_command=True,
+    no_args_is_help=False,
+)
+app.add_typer(features_app, rich_help_panel=_DAEMON)
+
+
+@features_app.callback(
+    invoke_without_command=True,
+    epilog=_examples(
+        "yazses features                  list every capability + advice",
+        "yazses features enable read-back  turn one on",
+        "yazses features disable cocktail  turn one off",
+    ),
+)
+def features(ctx: typer.Context) -> None:
+    """Show every YazSes capability, whether it's on/off, and what's advised.
+
+    Turn things on or off with `yazses features enable <name>` /
+    `yazses features disable <name>` — then `yazses restart` to apply.
+    """
+    if ctx.invoked_subcommand is not None:
+        return  # a subcommand (enable/disable) is running instead
+    from yazses.config import load_config
+    from yazses.system.features import feature_status
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    typer.echo("YazSes capabilities — toggle with `yazses features enable/disable <name>`:\n")
+    typer.echo(f"  {'':5}  {'NAME':<32} {'TOGGLE NAME':<14} ADVICE")
+    for f in feature_status(cfg):
+        mark = "● ON " if f.on else "○ off"
+        slug = f.slug if f.toggleable else "—"
+        typer.echo(f"  {mark}  {f.name:<32} {slug:<14} {f.tier_label}")
+    typer.echo(
+        "\n  ●/○ = on/off.  Apply changes with `yazses restart`."
+        "\n  Tip: `yazses features enable dysfluency` (use the TOGGLE NAME column)."
+    )
+
+
+def _apply_feature_writes(config_file, writes) -> None:
+    from yazses.system.configedit import set_config_key
+
+    for section, key, value, quote in writes:
+        set_config_key(config_file, section, key, value, quote=quote)
+
+
+@features_app.command("enable")
+def features_enable(
+    name: str = typer.Argument(..., help="Toggle name, e.g. read-back (see `yazses features`)."),
+    force: bool = typer.Option(False, "--force", help="Allow enabling experimental features."),
+) -> None:
+    """Turn a capability ON (writes your config), then `yazses restart` to apply."""
+    from yazses.config import load_config
+    from yazses.system.features import EXPERIMENTAL, find_feature, toggleable_slugs
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    feat = find_feature(cfg, name)
+    if feat is None or not feat.toggleable:
+        typer.echo(
+            f"Unknown feature {name!r}. Toggle names: {', '.join(toggleable_slugs())}",
+            err=True,
+        )
+        raise typer.Exit(1)
+    if feat.tier == EXPERIMENTAL and not force:
+        typer.echo(f"{feat.name} is experimental — {feat.why}", err=True)
+        typer.echo("Enable anyway with: yazses features enable "
+                   f"{feat.slug} --force", err=True)
+        raise typer.Exit(1)
+    _apply_feature_writes(platform.paths.config_file, feat.on_writes)
+    typer.echo(f"Enabled {feat.name}.  {feat.why}")
+    typer.echo("Apply it:  yazses restart")
+
+
+@features_app.command("disable")
+def features_disable(
+    name: str = typer.Argument(..., help="Toggle name, e.g. cocktail (see `yazses features`)."),
+) -> None:
+    """Turn a capability OFF (writes your config), then `yazses restart` to apply."""
+    from yazses.config import load_config
+    from yazses.system.features import find_feature, toggleable_slugs
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    feat = find_feature(cfg, name)
+    if feat is None or not feat.toggleable:
+        typer.echo(
+            f"Unknown feature {name!r}. Toggle names: {', '.join(toggleable_slugs())}",
+            err=True,
+        )
+        raise typer.Exit(1)
+    _apply_feature_writes(platform.paths.config_file, feat.off_writes)
+    typer.echo(f"Disabled {feat.name}.")
+    typer.echo("Apply it:  yazses restart")
+
+
+vocab_app = typer.Typer(
+    name="vocab",
+    help="Manage your personal dictionary (words STT mis-hears).",
+    context_settings=CONTEXT_SETTINGS,
+    no_args_is_help=True,
+)
+app.add_typer(vocab_app, rich_help_panel=_SETUP)
+
+
+@vocab_app.command("add")
+def vocab_add(
+    words: list[str] = typer.Argument(..., help="One or more words/names to add."),
+) -> None:
+    """Add words to the dictionary so YazSes spells them right (then `yazses restart`)."""
+    from yazses.system.vocabulary import add_vocab, vocab_path
+
+    platform = get_platform()
+    path = vocab_path(platform.paths.config_file.parent)
+    full = add_vocab(path, words)
+    typer.echo(f"Added {', '.join(words)}. Dictionary now has {len(full)} word(s).")
+    typer.echo("Apply it: yazses restart")
+
+
+@vocab_app.command("list")
+def vocab_list() -> None:
+    """Show the words in your personal dictionary."""
+    from yazses.system.vocabulary import load_vocab, vocab_path
+
+    platform = get_platform()
+    words = load_vocab(vocab_path(platform.paths.config_file.parent))
+    if not words:
+        typer.echo("Dictionary is empty. Add words with: yazses vocab add <word> ...")
+        return
+    for w in words:
+        typer.echo(f"  {w}")
+
+
+@vocab_app.command("remove")
+def vocab_remove(word: str = typer.Argument(..., help="The word to remove.")) -> None:
+    """Remove a word from your personal dictionary (then `yazses restart`)."""
+    from yazses.system.vocabulary import remove_vocab, vocab_path
+
+    platform = get_platform()
+    remaining = remove_vocab(vocab_path(platform.paths.config_file.parent), word)
+    typer.echo(f"Removed {word!r}. Dictionary now has {len(remaining)} word(s).")
+
+
+# Valid hold-to-talk keys (mirror platform/linux/hotkey.py keymap).
+_HOTKEYS = [
+    "right_alt", "left_alt", "right_ctrl", "left_ctrl",
+    "right_shift", "left_shift", "right_meta", "left_meta", "space",
+]
+
+hotkey_app = typer.Typer(
+    name="hotkey",
+    help="Change the key you hold to talk.",
+    context_settings=CONTEXT_SETTINGS,
+    no_args_is_help=True,
+)
+app.add_typer(hotkey_app, rich_help_panel=_SETUP)
+
+
+@hotkey_app.command("show")
+def hotkey_show() -> None:
+    """Show the current hold-to-talk key (and command key, if set)."""
+    from yazses.config import load_config
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    typer.echo(f"Hold-to-talk key:  {_resolved_hotkey(platform)}  (dictation)")
+    cmd = (cfg.hotkey.command_key or "").strip()
+    if cmd:
+        typer.echo(f"Command key:       {cmd}  (force command mode)")
+    else:
+        typer.echo("Command key:       (none) — commands auto-detected on the dictation key")
+    typer.echo(f"Choices: {', '.join(_HOTKEYS)}")
+
+
+@hotkey_app.command("set")
+def hotkey_set(
+    key: str = typer.Argument(..., help="The key to hold to talk (e.g. right_ctrl)."),
+) -> None:
+    """Set the key you hold to dictate, then `yazses restart` to apply.
+
+    Pick a dedicated modifier (right_alt/right_ctrl/right_shift) so it doesn't
+    collide with normal typing the way `space` can.
+    """
+    if key not in _HOTKEYS:
+        typer.echo(
+            f"Unknown key {key!r}. Choose one of: {', '.join(_HOTKEYS)}", err=True
+        )
+        raise typer.Exit(1)
+    from yazses.system.configedit import set_config_key
+
+    platform = get_platform()
+    set_config_key(platform.paths.config_file, "hotkey", "key", key)
+    typer.echo(f"Hold-to-talk key set to {key!r}. Apply it:  yazses restart")
+
+
+@hotkey_app.command("command")
+def hotkey_command(
+    key: str = typer.Argument(
+        ...,
+        help="A second key to hold for command mode, or 'off' to disable.",
+    ),
+) -> None:
+    """Set a dedicated *command* key, then `yazses restart` to apply.
+
+    Hold this key (instead of the dictation key) to issue commands only: whatever
+    you say is parsed as a command and never typed as text — an unrecognised
+    phrase is ignored. Use a different key from your dictation key. `off` removes it.
+
+    Example:  yazses hotkey command right_ctrl   (dictate on right_alt, command on right_ctrl)
+    """
+    from yazses.config import load_config
+    from yazses.system.configedit import set_config_key
+
+    platform = get_platform()
+    if key.lower() in {"off", "none", "clear", "disable"}:
+        set_config_key(platform.paths.config_file, "hotkey", "command_key", "")
+        typer.echo("Command key removed (commands auto-detected on the dictation key).")
+        typer.echo("Apply it:  yazses restart")
+        return
+    if key not in _HOTKEYS:
+        typer.echo(
+            f"Unknown key {key!r}. Choose one of: {', '.join(_HOTKEYS)}, or 'off'.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    dictation = load_config(platform.paths.config_file).hotkey.key or platform.default_hotkey
+    if key == dictation:
+        typer.echo(
+            f"Command key must differ from your dictation key ({dictation!r}). "
+            f"Change one with `yazses hotkey set <key>`.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    set_config_key(platform.paths.config_file, "hotkey", "command_key", key)
+    typer.echo(
+        f"Command key set to {key!r}. Hold {dictation} to dictate, {key} for commands."
+    )
+    typer.echo("Apply it:  yazses restart")
 
 
 @app.command(rich_help_panel=_DAEMON)
@@ -148,18 +508,28 @@ def status() -> None:
 
 @app.command(
     rich_help_panel=_SETUP,
-    epilog=_examples("yazses doctor    run this first if dictation isn't working"),
+    epilog=_examples(
+        "yazses doctor          run this first if dictation isn't working",
+        "yazses doctor --mic    also sample the mic and compare it to the VAD gate",
+    ),
 )
-def doctor() -> None:
+def doctor(
+    mic: bool = typer.Option(
+        False, "--mic",
+        help="Also record a short ambient clip and compare its level to the VAD threshold.",
+    ),
+) -> None:
     """Check system prerequisites and report what's OK / missing.
 
-    Verifies the platform, keyboard-capture and microphone permissions, the
-    session type (X11/Wayland) and its injection tools, the model cache, and any
-    configured extras (EMG port, prosody). Each line is OK / WARN / FAIL / SKIP.
+    Reports the installed version and daemon status, then verifies the platform,
+    keyboard-capture and microphone permissions, the session type (X11/Wayland)
+    and its injection tools, the STT model and model cache, the active config and
+    hotkey, and any configured extras (EMG port, prosody). With --mic it also
+    samples the microphone. Each line is OK / WARN / FAIL / SKIP.
     """
     from yazses.system.doctor import run_doctor
 
-    run_doctor()
+    run_doctor(check_mic=mic)
 
 
 @app.command(
@@ -402,6 +772,77 @@ def enroll() -> None:
         # Run wizard locally when daemon is not running
         from yazses.accessibility.enroll import run_wizard
         run_wizard(config_path=platform.paths.config_file)
+
+
+@app.command(
+    name="enroll-voice",
+    rich_help_panel=_SETUP,
+    epilog=_examples("yazses enroll-voice    record a sample → save your speaker voiceprint"),
+)
+def enroll_voice() -> None:
+    """Create your speaker voiceprint (for Cocktail Filter + Voiceprint Mind).
+
+    Records a short sample of your voice, computes a speaker embedding, and stores
+    it encrypted on this machine (never leaves the machine). Requires
+    `[voiceprint] enabled = true` and the voiceprint extra
+    (`uv sync --extra voiceprint`). Run once; re-run to re-enroll.
+    """
+    from yazses.config import load_config
+    from yazses.learning.crypto import Cipher, load_or_create_key
+    from yazses.system.miclevel import record
+    from yazses.voiceprint.enroll import enroll as do_enroll
+    from yazses.voiceprint.factory import build_embedder
+    from yazses.voiceprint.store import save_voiceprint
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    embedder = build_embedder(cfg.voiceprint)
+    if embedder is None:
+        typer.echo(
+            "Voiceprint unavailable. Set `[voiceprint] enabled = true` and install "
+            "the extra:\n  uv sync --extra voiceprint",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    secs = cfg.voiceprint.enroll_seconds
+    typer.echo(f"Recording {secs:.0f}s — speak normally now...")
+    emb = do_enroll(record, embedder, seconds=secs, sample_rate=cfg.audio.sample_rate)
+    cipher = Cipher(load_or_create_key(platform.paths.data_dir))
+    save_voiceprint(emb, platform.paths.data_dir / "voiceprint.enc", cipher)
+    typer.echo("Voiceprint saved (encrypted). Restart the daemon to use it:")
+    typer.echo("  systemctl --user restart yazses")
+
+
+gaze_app = typer.Typer(name="gaze", help="Look-to-pane gaze targeting (Glance-Type).")
+app.add_typer(gaze_app, rich_help_panel=_SETUP)
+
+
+@gaze_app.command("calibrate")
+def gaze_calibrate() -> None:
+    """Calibrate webcam gaze → screen zones (Glance-Type look-to-pane).
+
+    Requires `[gaze] enabled = true` and a webcam, with the gaze deps installed
+    (`pip install l2cs mediapipe opencv-python`). You look at a few on-screen
+    points to fit the gaze→screen mapping.
+    """
+    from yazses.config import load_config
+    from yazses.gaze.factory import build_gaze
+
+    platform = get_platform()
+    cfg = load_config(platform.paths.config_file)
+    backend = build_gaze(cfg.gaze)
+    if backend is None:
+        typer.echo(
+            "Gaze unavailable. Set `[gaze] enabled = true` and install the deps:\n"
+            "  pip install l2cs mediapipe opencv-python",
+            err=True,
+        )
+        raise typer.Exit(1)
+    typer.echo(
+        f"Gaze backend '{backend.name}' ready ({cfg.gaze.calibration_points} points). "
+        "Interactive calibration UI is in progress; see design/v2-cognitive-layer/03-glance-type.md."
+    )
 
 
 @model_app.command("list")
@@ -662,7 +1103,7 @@ def test() -> None:
     """
     platform = get_platform()
     typer.echo(f"Platform: {platform.name}")
-    typer.echo(f"Hotkey:   {platform.default_hotkey}")
+    typer.echo(f"Hotkey:   {_resolved_hotkey(platform)}")
     typer.echo(f"Config:   {platform.paths.config_file}")
     typer.echo("")
     typer.echo("Focus a text editor or browser address bar.")

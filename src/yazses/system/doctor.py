@@ -10,9 +10,12 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from yazses.platform import PermissionState, get_platform
+from yazses.system.miclevel import LevelStats
 
 # (name, status, detail) — status is "OK" | "FAIL" | "SKIP" | "WARN"
 _Check = tuple[str, str, str]
@@ -48,6 +51,17 @@ def _prosody_check(enabled: bool) -> _Check | None:
     return ("prosody extra (parselmouth)", "OK", "importable")
 
 
+def _extra_check(label: str, enabled: bool, module: str, hint: str) -> _Check | None:
+    """Generic optional-extra importability check (None when the feature is off)."""
+    if not enabled:
+        return None
+    try:
+        __import__(module)
+    except Exception:
+        return (label, "WARN", f"not installed — feature dormant ({hint})")
+    return (label, "OK", "importable")
+
+
 def _dysfluency_check(enabled: bool) -> _Check | None:
     """Report Dysfluency-Friendly Mode status (ADR-015). Skipped when off."""
     if not enabled:
@@ -59,14 +73,141 @@ def _dysfluency_check(enabled: bool) -> _Check | None:
     )
 
 
-def run_doctor() -> None:
+def _version_check() -> _Check:
+    """Report the installed YazSes version (one-stop health check)."""
+    try:
+        return ("Version", "OK", f"yazses {_pkg_version('yazses')}")
+    except PackageNotFoundError:
+        return ("Version", "WARN", "yazses version metadata not found")
+
+
+def _daemon_check(platform) -> _Check:
+    """Report whether the daemon is running, with live state when IPC answers."""
+    lifecycle = platform.lifecycle
+    if not lifecycle.is_running():
+        return ("Daemon", "WARN", "not running — start with `yazses start`")
+    pid = lifecycle.read_pid()
+    try:
+        client = platform.ipc_client_factory(platform.paths.ipc_socket)
+        info = client.call("status")
+        bits = [b for b in (
+            f"state {info.get('state')}" if info.get("state") else "",
+            f"model {info.get('model')}" if info.get("model") else "",
+        ) if b]
+        suffix = (", " + ", ".join(bits)) if bits else ""
+        return ("Daemon", "OK", f"running (PID {pid}{suffix})")
+    except Exception:
+        # Running but IPC not yet ready (still loading the model) or unreachable.
+        return ("Daemon", "OK", f"running (PID {pid}; IPC not ready)")
+
+
+def _model_check(model: str, hf_cache: Path) -> _Check:
+    """Report whether the configured STT model is available locally.
+
+    A local directory/file path is checked directly; otherwise we scan the
+    Hugging Face hub cache for a ``models--…<model>`` snapshot. We match on the
+    cache directory name (no ``faster_whisper`` import) so doctor stays fast.
+    """
+    local = Path(model).expanduser()
+    if local.exists():
+        return ("STT model", "OK", f"{model} (local files)")
+    token = model.split("/")[-1]
+    if hf_cache.exists():
+        for entry in hf_cache.iterdir():
+            if (
+                entry.name.startswith("models--")
+                and entry.name.endswith(token)
+                and (entry / "snapshots").exists()
+            ):
+                return ("STT model", "OK", f"{model} (cached)")
+    return (
+        "STT model",
+        "WARN",
+        f"{model} not downloaded — fetched automatically on first dictation "
+        "(needs network once)",
+    )
+
+
+def _config_summary(cfg, config_file: Path) -> list[_Check]:
+    """Surface the active config file, resolved hotkey, and STT prompt status."""
+    out: list[_Check] = []
+    if config_file.exists():
+        out.append(("Config file", "OK", str(config_file)))
+    else:
+        out.append((
+            "Config file", "WARN",
+            f"{config_file} (absent — using built-in defaults)",
+        ))
+    out.append((
+        "Hotkey", "OK",
+        f"{cfg.hotkey.key} (hold {cfg.hotkey.hold_threshold_ms} ms)",
+    ))
+    prompt = (cfg.stt.initial_prompt or "").strip()
+    if prompt:
+        preview = prompt if len(prompt) <= 40 else prompt[:37] + "..."
+        out.append(("STT prompt", "OK", f"primed: {preview!r}"))
+    else:
+        out.append((
+            "STT prompt", "OK",
+            "app name only (set [stt] initial_prompt to add vocabulary)",
+        ))
+    return out
+
+
+def _sample_mic(cfg, seconds: float) -> LevelStats:
+    """Record a short ambient clip and return its level stats (seam for tests)."""
+    from yazses.system.miclevel import analyze, record
+
+    sr = cfg.audio.sample_rate
+    return analyze(record(seconds, sr), sr)
+
+
+def _mic_level_check(cfg, seconds: float = 2.0) -> _Check:
+    """Passive ambient level vs the VAD gate (no speech needed).
+
+    Warns when the resting room level already meets/exceeds ``vad_threshold`` —
+    the gate would then pass noise through as spurious transcripts. A quiet room
+    is OK; for speech-level calibration the detail points at ``yazses mic-level``.
+    """
+    try:
+        stats = _sample_mic(cfg, seconds)
+    except Exception as exc:
+        return ("Mic level", "WARN", f"could not sample microphone ({exc})")
+    thr = cfg.accessibility.vad_threshold
+    if not stats.is_silent and stats.mean_abs >= thr:
+        return (
+            "Mic level", "WARN",
+            f"ambient {stats.mean_abs:.4f} >= vad_threshold {thr} — room noise may "
+            "trigger spurious transcripts; raise it or run `yazses mic-level`",
+        )
+    return (
+        "Mic level", "OK",
+        f"ambient {stats.mean_abs:.4f} under vad_threshold {thr} "
+        "(speak-test with `yazses mic-level`)",
+    )
+
+
+def run_doctor(check_mic: bool = False, mic_seconds: float = 2.0) -> None:
     platform = get_platform()
     perms = platform.permissions
     paths = platform.paths
 
+    # Load config once up front so the version/daemon/model/config checks can use
+    # it; a malformed config degrades to defaults rather than crashing doctor.
+    cfg = None
+    try:
+        from yazses.config import load_config
+        # load_config returns defaults when the path is absent; pass it directly
+        # rather than None (None falls back to the default user config path).
+        cfg = load_config(paths.config_file)
+    except Exception:
+        cfg = None
+
     checks: list[_Check] = []
 
     checks.append(("Platform", "OK", platform.name))
+    checks.append(_version_check())
+    checks.append(_daemon_check(platform))
 
     # Keyboard capture
     kb = perms.check_keyboard_capture()
@@ -83,6 +224,10 @@ def run_doctor() -> None:
         "OK" if mic in (PermissionState.OK, PermissionState.NOT_APPLICABLE) else "FAIL",
         mic.value,
     ))
+
+    # Opt-in passive mic-level vs VAD threshold (records a short ambient clip).
+    if check_mic and cfg is not None:
+        checks.append(_mic_level_check(cfg, mic_seconds))
 
     # Linux-specific injection tools
     if sys.platform == "linux":
@@ -103,6 +248,10 @@ def run_doctor() -> None:
     hf_cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
     checks.append(("Model cache", "OK" if hf_cache.exists() else "WARN", str(hf_cache)))
 
+    # Configured STT model availability (downloaded vs fetched-on-first-use).
+    if cfg is not None:
+        checks.append(_model_check(cfg.stt.model, hf_cache))
+
     # Config dir — create it if absent (first-run scenario)
     if paths.config_dir.exists():
         checks.append(("Config dir", "OK", str(paths.config_dir)))
@@ -113,10 +262,14 @@ def run_doctor() -> None:
         except OSError as exc:
             checks.append(("Config dir", "FAIL", f"could not create: {exc}"))
 
+    # Active config file, hotkey, and STT prompt summary.
+    if cfg is not None:
+        checks.extend(_config_summary(cfg, paths.config_file))
+
     # EMG serial port (when configured)
     try:
-        from yazses.config import load_config
-        cfg = load_config(paths.config_file if paths.config_file.exists() else None)
+        if cfg is None:
+            raise RuntimeError("config unavailable")
         if cfg.emg.device_port:
             port = Path(cfg.emg.device_port)
             checks.append((
@@ -132,6 +285,18 @@ def run_doctor() -> None:
         dysfluency = _dysfluency_check(cfg.accessibility.dysfluency_friendly)
         if dysfluency is not None:
             checks.append(dysfluency)
+        # v2 cognitive-layer extras (report only when the feature is enabled).
+        for chk in (
+            _extra_check("tts extra (kokoro-onnx)", cfg.tts.enabled,
+                         "kokoro_onnx", "uv sync --extra tts"),
+            _extra_check("voiceprint extra (speechbrain)",
+                         cfg.voiceprint.enabled or cfg.cocktail.enabled,
+                         "speechbrain", "uv sync --extra voiceprint"),
+            _extra_check("gaze extra (l2cs)", cfg.gaze.enabled,
+                         "l2cs", "pip install l2cs mediapipe opencv-python"),
+        ):
+            if chk is not None:
+                checks.append(chk)
     except Exception:
         pass
 

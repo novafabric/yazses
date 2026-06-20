@@ -20,8 +20,84 @@ prints the script to inspect or customise).
 |---|---|
 | `yazses start` | Start the daemon detached (PID-file tracked). Under systemd, prefer `systemctl --user start yazses`. |
 | `yazses stop` | Stop the running daemon (SIGTERM). |
+| `yazses restart` | Stop **all** daemons (including stray/detached ones) and start exactly one. Use this if dictation is being typed twice. |
 | `yazses status` | Show state, hotkey, model, injection backend, uptime (over IPC). |
+| `yazses features` | List every capability, whether it's on/off, its toggle name, and what's advised. |
+| `yazses features enable <name>` | Turn a capability **on** (writes your config), then `yazses restart`. |
+| `yazses features disable <name>` | Turn a capability **off**, then `yazses restart`. |
 | `yazses-daemon` | Run the daemon in the **foreground** (logs to console) — useful for debugging. |
+
+`yazses start` restarts cleanly if a daemon is already running (never spawns a duplicate).
+
+### Turning features on and off
+
+`yazses features` is the friendly switchboard — no config-file editing needed:
+
+```bash
+yazses features                      # see everything + the TOGGLE NAME column + advice
+yazses features enable dysfluency    # turn one on  (use the TOGGLE NAME)
+yazses features disable streaming    # turn one off
+yazses restart                       # apply
+```
+
+Each row shows an **advice** tier:
+
+| Tier | Meaning |
+|---|---|
+| `core` | Always on (e.g. Dictation core) — can't be toggled. |
+| `recommended (on by default)` | Shipped on; keep it (Voice commands, Mid-Thought Undo, overlay). |
+| `recommended` | Safe and useful — worth enabling (e.g. Dysfluency-Friendly if you stutter). |
+| `optional` | Enable only if you want that capability (Punch-In, Prosody Ink, Read-Back, …). |
+| `experimental — not advised yet` | Known rough edges (Cocktail Filter, Glance-Type). Refused unless you pass `--force`. |
+
+Experimental features are guarded: `yazses features enable cocktail` prints why it's
+not advised and exits; add `--force` to override.
+
+## Personal dictionary (words STT mis-hears)
+
+| Command | Description |
+|---|---|
+| `yazses vocab add <word> ...` | Add words/names to your dictionary so they're spelled right. Then `yazses restart`. |
+| `yazses vocab list` | Show your dictionary. |
+| `yazses vocab remove <word>` | Remove a word. |
+
+Stored at `~/.config/yazses/vocabulary.txt`; the daemon merges these into Whisper's
+`initial_prompt` on every dictation.
+
+## Hold-to-talk key
+
+| Command | Description |
+|---|---|
+| `yazses hotkey show` | Show the current dictation key, the command key (if any), and the choices. |
+| `yazses hotkey set <key>` | Change the key you hold to **dictate** (e.g. `right_ctrl`), then `yazses restart`. |
+| `yazses hotkey command <key>` | Set a dedicated **command** key, or `off` to disable it. Then `yazses restart`. |
+
+Choices: `right_alt` (default), `left_alt`, `right_ctrl`, `left_ctrl`, `right_shift`,
+`left_shift`, `right_meta`, `left_meta`, `space`. Prefer a dedicated modifier so it
+doesn't collide with normal typing.
+
+### Dedicated command key (force command mode)
+
+By default one key does both jobs: you hold the dictation key, speak, and YazSes
+**auto-detects** whether your phrase was a command ("save", "undo") or text. That's
+fine for most use, but an exactly-matching phrase can fire a command when you meant
+to type it.
+
+A dedicated command key removes the ambiguity. Bind a **second** key — when you hold
+it, everything you say is parsed as a command and **never typed as literal text**
+(an unrecognised phrase is simply ignored, not inserted):
+
+```bash
+yazses hotkey command right_ctrl   # dictate on right_alt, command on right_ctrl
+yazses restart
+yazses hotkey command off           # back to single-key auto-detect
+```
+
+- The command key must be **different** from your dictation key.
+- Holding the **dictation** key still works exactly as before (text, with command
+  auto-detection).
+- Holding the **command** key: "save" → Ctrl+S even though it would normally be text;
+  "hello there" → ignored (no command matched), nothing typed.
 
 ## Updating
 
@@ -38,7 +114,8 @@ After a successful update, restart the daemon to load it:
 
 | Command | Description |
 |---|---|
-| `yazses doctor` | Check prerequisites: platform, keyboard capture, microphone, session type, injection tools, model cache, config dir, (EMG port if configured). |
+| `yazses doctor` | Health check: installed version, daemon status (PID/state/model), keyboard capture, microphone, session type, injection tools, STT model availability, model cache, config dir, active config + hotkey summary, (EMG port / enabled extras if configured). |
+| `yazses doctor --mic` | As above, plus record a short ambient clip and warn if room level meets/exceeds `accessibility.vad_threshold`. |
 | `yazses mic-level` | Record ~4s, report your average mic level vs the current `vad_threshold`, and recommend a threshold. |
 | `yazses mic-level --set` | Same, and write the recommended `vad_threshold` to `config.toml` in place (comments preserved). |
 | `yazses mic-level -s N` | Record for `N` seconds instead of 4. |
@@ -50,6 +127,7 @@ After a successful update, restart the daemon to load it:
 
 | Command | Description |
 |---|---|
+| `yazses test` | End-to-end self-test: types `YazSes OK` into the focused window (no speaking) so you can confirm injection works. Focus a text editor first. |
 | `yazses inject "text"` | Inject text into the focused app without recording (tests the injection backend). |
 | `yazses enroll` | Run the accessibility calibration wizard (writes `vad_threshold`, etc.). Note: can set a too-high threshold in a noisy room — verify with `yazses mic-level`. |
 | `yazses punch-in` | Re-speak just the wrong phrase to correct the last dictation burst. Records a short window, aligns it against the last burst, deletes it and retypes it corrected. Requires `[punch_in] enabled = true`. |
@@ -254,6 +332,65 @@ enabled = true
 prewarm = true
 debounce_ms = 500          # anti-thrash between endpoint fires
 ```
+
+---
+
+# v2 — perceptual & personalization layer (all off by default)
+
+Four advanced features that personalize and focus recognition. All are **off by
+default**, **fully local**, and need an optional extra and/or hardware (mic/webcam)
+or a one-time training step. Plans: `design/v2-cognitive-layer/`.
+
+| Command | Description |
+|---|---|
+| `yazses enroll-voice` | Record a sample and save your encrypted **speaker voiceprint** (needed by Cocktail Filter + Voiceprint Mind). Requires `[voiceprint] enabled` + `uv sync --extra voiceprint`. |
+| `yazses gaze calibrate` | Calibrate webcam gaze → screen zones for **Glance-Type**. Requires `[gaze] enabled` + a webcam + `pip install l2cs mediapipe opencv-python`. |
+
+## Voiceprint Mind — personalize STT to your voice (`[personalize]`)
+P1 (available now): bias the recognizer toward your vocabulary so it spells your
+jargon and proper nouns. Set `YAZSES_VOCABULARY="GitHub,Kubernetes,kubectl"` and:
+```toml
+[personalize]
+enabled = true
+max_prompt_terms = 64
+# lora = true   # P2: opt-in nightly LoRA personal fine-tune (needs compute; gated)
+```
+P2 (LoRA fine-tune on your own audio) is planned and gated on a held-out WER win.
+
+## Cocktail Filter — ignore other voices (`[cocktail]`)
+Drops audio frames that aren't *you* before transcription, so a nearby voice never
+enters the text. Enroll once (`yazses enroll-voice`), then:
+```toml
+[voiceprint]
+enabled = true             # speaker embedder (uv sync --extra voiceprint)
+[cocktail]
+enabled = true             # mode = "gate" (P1); "suppress" (P2) is gated on a model
+target_threshold = 0.6     # higher = stricter "is this me?"
+```
+
+## Glance-Type — look at a pane to target it (`[gaze]`)
+Coarse webcam gaze picks the screen zone/window your next dictation lands in
+(look-to-pane, not look-to-caret). Needs a webcam + a one-time `yazses gaze calibrate`:
+```toml
+[gaze]
+enabled = true
+zones = "grid3x3"          # grid3x3 | grid2x2 | windows
+camera_index = 0
+```
+The camera is used in-RAM during a hold only — frames are never stored or sent.
+
+## Polyglot Switch — mixed-language dictation (`[polyglot]`)
+Transcribe speech that mixes two languages (e.g. `fa-en`). Needs a trained
+code-switch adapter for the pair (stock Whisper can't code-switch); the routing is
+scaffolded and the adapter is gated on a held-out MER win.
+```toml
+[polyglot]
+enabled = true
+pair = "fa-en"
+adapter_path = ""          # path to the trained CS adapter; empty = dormant
+```
+
+`yazses doctor` reports whether each enabled feature's extra is importable.
 
 ## Diagnostic log format
 
