@@ -42,7 +42,7 @@ This repo holds **one product** with **two implementations** — not two separat
 | Platform | Command |
 |---|---|
 | **Linux** (Debian/Ubuntu) | `bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)` |
-| **Linux** (any distro) | `sudo snap install yazses --classic` |
+| **Linux** (any distro) | `sudo snap install yazses` |
 | **Any OS** (Python ≥ 3.11) | `pipx install yazses` |
 
 **Step 2 — Set up**
@@ -225,8 +225,9 @@ yazses restart
 # APT script — Debian / Ubuntu (recommended)
 bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
 
-# Snap — any distro
-sudo snap install yazses --classic
+# Snap — any distro (strict confinement; keystroke injection works on X11.
+# On Wayland, prefer pipx below for full input access.)
+sudo snap install yazses
 
 # pipx — any distro with Python ≥ 3.11
 sudo apt install libportaudio2 xdotool xclip pipx   # Debian/Ubuntu runtime deps

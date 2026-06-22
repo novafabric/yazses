@@ -1,18 +1,30 @@
 name: yazses
 base: core24
-version: "1.0.0"
+version: "1.2.0"
 summary: Local, offline voice dictation for Linux
 description: |
-  Hold Space anywhere on your desktop, speak, release — the transcribed
-  text appears in whatever app is focused. No cloud, no GPU required.
-  Powered by faster-whisper (CPU/int8, no GPU needed).
+  YazSes is offline, on-device voice dictation. Hold a key (Space by default),
+  speak, release — your words are transcribed locally and typed into whatever
+  app has focus. No cloud, no API key, no subscription; nothing leaves your
+  machine.
 
-  Install with: sudo snap install yazses
+  - Offline speech-to-text with faster-whisper (CPU, int8) — no GPU needed
+  - Voice commands for editors and terminals: "undo that", "save file",
+    "go to line 42", "run the tests", "rename this to user_id"
+  - Personal vocabulary and multi-step macros
+  - Works in any focused text field — editors, browsers, terminals, chat
+
+  Note: this is a strictly-confined snap; keystroke injection works on X11
+  sessions. For Wayland or full input access, install via pipx instead:
+  https://pypi.org/project/yazses/
+
+  Install:  sudo snap install yazses
 
 title: YazSes
+icon: snap/gui/yazses.png
 contact: mohsen.seyedkazemi@gmail.com
 license: Apache-2.0
-website: https://novafabric.ai
+website: https://github.com/novafabric/yazses
 source-code: https://github.com/novafabric/yazses
 issues: https://github.com/novafabric/yazses/issues
 
