@@ -107,23 +107,22 @@ journalctl --user -u yazses.service -f     # live logs via journald
 Config lives at `~/.config/yazses/config.toml`. See the
 [CLI reference](cli-reference.md) for all commands.
 
-## 7. (Optional) Voice-activity overlay
+## 7. Voice-activity overlay
 
 The overlay draws neon "sonar" rings near the cursor that pulse with your voice
-while you dictate. Install the extra and enable it:
+while you dictate. It is **on by default** — you only need to install the extra
+that ships PySide6 (kept optional so the base install never fails on older distros
+without a Qt6 wheel; the wheels need glibc ≥ 2.28, i.e. Ubuntu 20.04+):
 
 ```bash
 uv tool install 'yazses[overlay]'     # adds PySide6
 ```
 
-```toml
-# ~/.config/yazses/config.toml
-[overlay]
-enabled = true
-```
-
-The daemon auto-launches `yazses-overlay` on start when a display is present and
-terminates it on shutdown. Run `yazses overlay` yourself to preview it.
+The daemon then auto-launches `yazses-overlay` on start when a display is present
+and terminates it on shutdown. If PySide6 isn't installed the daemon logs a
+one-line hint and keeps dictating — nothing breaks. To turn the overlay off, set
+`[overlay] enabled = false` in `~/.config/yazses/config.toml`. Run `yazses
+overlay` yourself to preview it.
 
 **Transparency note (X11):** the see-through glow needs a compositing window
 manager. If you run a bare WM without one, install `picom`:

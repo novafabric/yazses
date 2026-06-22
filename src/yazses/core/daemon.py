@@ -62,6 +62,19 @@ def should_launch_overlay(config: Config, env: Mapping[str, str]) -> bool:
     return bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
 
 
+def overlay_dependency_available() -> bool:
+    """Whether PySide6 (the optional ``overlay`` extra) is importable.
+
+    The overlay is on by default, but PySide6 stays an optional dependency so the
+    base install never fails on older distros without a compatible Qt6 wheel. When
+    it's missing we skip the launch quietly rather than spawn a process that dies
+    on the import — see :meth:`Daemon._maybe_launch_overlay`.
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("PySide6") is not None
+
+
 @dataclass
 class _DaemonState:
     state: TrayState = TrayState.LOADING
@@ -194,6 +207,12 @@ class Daemon:
     def _maybe_launch_overlay(self) -> None:
         """Spawn the sonar overlay as a detached process when configured."""
         if not should_launch_overlay(self._config, os.environ):
+            return
+        if not overlay_dependency_available():
+            log.info(
+                "Overlay is enabled but PySide6 is not installed; skipping. "
+                "Install it with: uv sync --extra overlay  (or pip install 'yazses[overlay]')"
+            )
             return
         try:
             self._overlay_proc = subprocess.Popen(

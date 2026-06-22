@@ -147,14 +147,17 @@ For true see-through rings on X11 you need a compositor (e.g. `picom`) running.
 | `yazses overlay` | Run the overlay in the foreground (preview/debug). Connects to the running daemon over IPC. |
 | `yazses-overlay` | Same, as a direct console script (this is what the daemon auto-launches). |
 
-Enable auto-launch with the daemon by setting `[overlay] enabled = true`. The
-daemon only spawns it when a display (`DISPLAY`/`WAYLAND_DISPLAY`) is present.
+Auto-launch with the daemon is **on by default** (`[overlay] enabled = true`);
+set it to `false` to opt out. The daemon only spawns the overlay when a display
+(`DISPLAY`/`WAYLAND_DISPLAY`) is present **and** PySide6 is installed — if the
+`overlay` extra is missing it logs a one-line hint and carries on, so dictation
+is never affected.
 
 `[overlay]` config keys:
 
 | Key | Default | Description |
 |---|---|---|
-| `enabled` | `false` | Auto-launch the overlay alongside the daemon. |
+| `enabled` | `true` | Auto-launch the overlay alongside the daemon (soft no-op without PySide6). |
 | `style` | `"sonar"` | Visual style (reserved for future styles). |
 | `position` | `"cursor"` | `cursor` \| `bottom_center` \| `top_center` \| `corner`. |
 | `react_to_voice` | `true` | Drive the animation from live mic level (vs a steady pulse). |

@@ -7,6 +7,8 @@
 
 **Hold a key → speak → release.** On-device voice dictation that types into any app, plus voice commands and macros — entirely offline. No cloud. No API key. No subscription.
 
+YazSes is an open-source, offline voice-dictation daemon for Linux, macOS, and Windows. It transcribes your speech locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and types the result into whatever window has focus. Use it when you want hands-free dictation and editor/terminal voice commands without sending audio to Google, Apple, or Microsoft.
+
 ---
 
 ## Two versions of YazSes
@@ -16,54 +18,52 @@ This repo holds **one product** with **two implementations** — not two separat
 | | **Part 1 — Python** · `main` | **Rust HCI exploration** · `archive/rust-hci-v1` |
 |---|---|---|
 | What it is | The shipping app — voice dictation, commands, macros | An early-stage rewrite exploring deeper **human–computer interaction**: an on-device *agent* (LLM tool-use, personal memory, editor awareness) |
-| Status | ✅ **Active — current product** (v0.9.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
+| Status | ✅ **Active — current product** (v1.2.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
 | Hold-to-talk dictation | ✅ | ✅ |
-| Offline STT | ✅ faster-whisper | ✅ Whisper + Moonshine v2 (~9 ms) |
-| Voice commands → key sequences | ✅ regex grammar (+ optional SLM router) | ✅ via LLM tool-calls |
+| Offline STT | ✅ faster-whisper (CPU int8) | ✅ Whisper + Moonshine v2 (~9 ms) |
+| Voice commands | ✅ regex grammar (+ optional SLM router) → key sequences | ✅ via LLM tool-calls |
 | Voice macros · Mid-Thought Undo · Punch-In · Prosody Ink · Ghost Ahead | ✅ | ❌ |
 | Dysfluency-Friendly Mode · learning corpus + `yazses tune` | ✅ | ❌ |
 | Friendly CLI (`-h`, examples, `yazses update`) | ✅ | ❌ |
-| On-device **LLM agent** (20 tools: git commit, media, notes, screenshots…) | ❌ (optional offline text cleanup only) | ✅ |
+| On-device **LLM agent** (OS tools: git commit, media, notes, screenshots…) | ❌ (optional offline text *cleanup* only) | ✅ |
 | **Personal memory** (encrypted on-device vector store) | ❌ | ✅ |
 | Editor context (Neovim / VS Code) | ✅ LSP context, opt-in | ✅ 5-tier window detection + bridges |
-| Screen-reader accessibility (AT-SPI / NVDA) | ❌ | ✅ |
-| Packaged & distributed (PyPI, snap, APT, …) | ✅ | ❌ |
+| Screen-reader integration (AT-SPI / NVDA) | ❌ | ✅ |
+| Packaged & distributed (PyPI, snap, APT) | ✅ | ❌ |
 
-**Bottom line:** if you want YazSes, use **Part 1** (this branch). The Rust branch is kept only for reference — nothing on `main` builds, installs, or depends on it. The Rust effort aimed at a more ambitious agentic HCI layer but was left in early stages; revisiting it is a deliberate future decision, not part of day-to-day work here.
+**Bottom line:** if you want YazSes, use **Part 1** (this branch) — an offline dictation + voice-command daemon. The Rust branch is kept only for reference; nothing on `main` builds, installs, or depends on it. The Rust effort aimed at a more ambitious agentic HCI layer but was left in early stages — revisiting it is a deliberate future decision, not part of day-to-day work here.
 
 ---
 
 ## Quick Start
 
-**Step 1 — Install**
+**Step 1 — Install** (see [all install options](#all-install-options) for every platform)
 
 | Platform | Command |
 |---|---|
 | **Linux** (Debian/Ubuntu) | `bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)` |
-| **Linux** (any distro) | `pipx install yazses` |
-| **macOS** | `brew tap novafabric/yazses && brew install --cask yazses` |
-| **Windows** | `winget install NovaFabric.YazSes` |
+| **Linux** (any distro) | `sudo snap install yazses --classic` |
+| **Any OS** (Python ≥ 3.11) | `pipx install yazses` |
 
 **Step 2 — Set up**
 
 ```sh
-yazses doctor               # check everything is ready
-yazses model pull qwen3-7b  # download the AI model (~5 GB, one-time)
-yazses enroll               # calibrate your microphone (30 seconds)
-yazses start                # start the daemon
+yazses doctor               # check mic, injection backend, permissions
+yazses enroll               # calibrate your microphone (~30 seconds)
+yazses start                # start the dictation daemon
 ```
 
-**Step 3 — Use it**
+**Step 3 — Use it** — hold the hotkey, speak, release. The text is typed into the focused app.
 
-| OS | Hold this key | Say anything |
+| OS | Hold this key | Say… |
 |---|---|---|
-| Linux | `Space` | "open terminal", "commit add new feature", "type hello world" |
-| macOS | `Right Option` | "set volume to 50", "take a screenshot called mockup" |
-| Windows | `Right Ctrl` | "remember my meeting is at 3pm", "what did I tell you yesterday?" |
+| Linux | `Space` | *"the quick brown fox"* (types it) · *"go to line 42"* · *"run the tests"* |
+| macOS | `Right Option` | *"delete the last word"* · *"save file"* · *"new function parse config"* |
+| Windows | `Right Ctrl` | *"undo that"* · *"select all"* · *"comment this line"* |
 
-Release the key — YazSes acts within one second.
+Release the key — YazSes transcribes and acts within about a second.
 
-> **First time on macOS?** Right-click the app → Open (Gatekeeper), then grant Accessibility + Microphone when prompted.
+> **First time on macOS?** v0 builds are unsigned: right-click the app → Open (Gatekeeper), then grant Accessibility + Microphone when prompted.
 >
 > **First time on Windows?** If SmartScreen warns you, click **More info → Run anyway**.
 >
@@ -73,35 +73,39 @@ Release the key — YazSes acts within one second.
 
 ## What you can say
 
-YazSes understands natural language and maps it to 20 built-in actions:
+Hold the key and just **talk** — by default everything you say is typed at the cursor. YazSes also recognises a set of **voice commands** (a fast regex grammar; an optional ~0.5B SLM router catches phrasings the grammar misses) that map to editor/terminal **key sequences** instead of being typed:
 
 | Say something like… | What happens |
 |---|---|
-| *"type hello world"* | Types text at the cursor |
-| *"commit added login feature"* | Runs `git add -A && git commit -m "added login feature"` |
-| *"open main.py"* | Opens the file |
-| *"go to function parse_config"* | Jumps to the symbol via LSP |
-| *"set volume to 30"* | Sets system volume |
-| *"take a screenshot called diagram"* | Saves `diagram.png` |
-| *"remember my password expires on June 1"* | Stores in encrypted local memory |
-| *"what did I remember about passwords?"* | Queries local memory |
-| *"set a timer for 25 minutes"* | Starts a countdown |
-| *"open VS Code"* | Launches the application |
-| *"press Control S"* | Sends the key chord |
+| *"the quick brown fox"* | Types the text at the cursor (dictation) |
+| *"delete the last three words"* | Deletes the last 3 words |
+| *"undo that"* / *"undo five times"* | Sends undo |
+| *"save file"* · *"copy"* · *"paste"* | Save / copy / paste |
+| *"select all"* · *"select to end"* | Selection commands |
+| *"comment this line"* | Toggles a comment |
+| *"go to line 42"* | Jumps to line 42 |
+| *"go to function parse_config"* | Jumps to the symbol (via LSP, opt-in) |
+| *"run the tests"* / *"run the build"* | Runs the editor/terminal action |
+| *"rename this to user_id"* | Renames the symbol |
+
+You can also define multi-step **macros** and a personal **vocabulary** of mis-heard words — see the [CLI reference](docs/cli-reference.md).
 
 ---
 
 ## How it works
 
 ```
-Hold hotkey → record audio → speech-to-text → local LLM → pick tool → execute
+Hold hotkey → record audio → VAD gate → faster-whisper (CPU) → clean + disfluency filter
+            → command grammar (Tier 1 regex, optional Tier 2 SLM router)
+            → dictate? type the text   ·   command? send the key sequence
 ```
 
-Everything runs on your CPU. The LLM (Qwen3-7B by default) reads the transcript and decides which of the 20 tools to call. Result appears in the focused window within ~1 second on a modern laptop.
+Everything runs on your CPU — no GPU, no network. Transcription uses **faster-whisper** (int8). A fast regex grammar classifies each utterance as dictation or a command; when its confidence is low, an optional ~0.5B SLM router takes a second look. The result appears in the focused window within about a second on a modern laptop.
 
-**Models used:**
-- **STT:** Moonshine v2 (9 ms, streaming) for short commands · Whisper-large-v3-turbo for long dictation
-- **LLM:** llama.cpp with GBNF tool-call grammar (Qwen3-7B default) · Ollama backend optional
+**Models:**
+- **Speech-to-text:** faster-whisper — `tiny.en` (fast) / `base.en` / `small.en` (more accurate), int8 on CPU
+- **Command routing (optional):** Qwen2.5-0.5B SLM for Tier 2 intent classification — *not* required for dictation, fetched with `yazses model download`
+- **Dictation cleanup (optional, off by default):** a small offline LLM can tidy grammar/punctuation; length- and token-preservation guards stop it rewriting meaning
 
 ---
 
@@ -109,23 +113,34 @@ Everything runs on your CPU. The LLM (Qwen3-7B by default) reads the transcript 
 
 | | |
 |---|---|
-| **OS** | Linux (primary) · macOS 13+ · Windows 10+ |
-| **RAM** | 8 GB minimum · 16 GB recommended |
-| **Disk** | 6–10 GB for the default model |
-| **CPU** | 4+ cores · no GPU required |
+| **OS** | Linux (primary) · macOS 11+ · Windows 10 (21H2)+ |
+| **RAM** | 4 GB minimum · 8 GB comfortable |
+| **Disk** | ~250 MB–1 GB for the faster-whisper model (downloaded on first run) |
+| **CPU** | 2+ cores · no GPU required |
 | **Mic** | Any USB or built-in microphone |
 
 ---
 
 ## Key features
 
-- **Fully offline** — no audio, no text, no data leaves the machine by default
-- **Agent, not just dictation** — understands intent, not just words
-- **Dual STT stack** — fast streaming for commands, accurate long-form for dictation
-- **Personal memory** — encrypted local vector store, voice-queryable
-- **Editor integration** — Neovim and VS Code LSP context improves accuracy on code identifiers
-- **Accessibility** — AT-SPI (Linux) and NVDA (Windows) screen-reader support; Talon coexistence
-- **EMG support** — works with muscle sensors for motor-disability use cases
+- **Fully offline** — no audio, no text, nothing leaves the machine by default; no cloud, API key, or subscription
+- **Hold-to-talk dictation** — type into any focused app on Linux, macOS, or Windows
+- **Voice commands** — editor/terminal actions (undo, save, go-to-line, run tests, rename…) via regex grammar + an optional SLM router
+- **Macros & personal vocabulary** — define multi-step commands and teach YazSes your mis-heard words
+- **Dysfluency-Friendly Mode** — opt-in collapse of stutters/repeats (`b-b-because` → `because`) for stuttered or dysarthric speech
+- **Self-improving** — opt-in, encrypted on-device learning corpus; `yazses tune` proposes accuracy fixes from your own corrections (nothing leaves the machine)
+- **Editor context** — optional Neovim / VS Code LSP context improves accuracy on code identifiers
+- **Accessibility** — VAD calibration wizard, mic-level tuning, and EMG (muscle-sensor) trigger support for motor-disability use
+- **Voice-activity overlay** — optional sonar rings near the cursor while you speak
+
+---
+
+## Limitations / when *not* to use YazSes
+
+- **Not an LLM agent.** YazSes dictates text and runs editor/terminal commands. It does **not** browse, reason over your files, set timers, or hold a conversation — that was the paused Rust exploration (see *Two versions* above).
+- **CPU faster-whisper, not a cloud service.** For the absolute lowest word-error rate on a noisy mic, a cloud STT may still beat it; the trade-off is that nothing leaves your machine.
+- **English-tuned by default.** It ships with `*.en` Whisper models; other languages need a different model.
+- **Desktop only.** No mobile or web build.
 
 ---
 
@@ -133,20 +148,25 @@ Everything runs on your CPU. The LLM (Qwen3-7B by default) reads the transcript 
 
 | Command | Description |
 |---|---|
-| `yazses start` | Start the YazSes daemon in the background |
+| `yazses start` | Start the YazSes daemon in the background (restarts cleanly if one is already running) |
+| `yazses restart` | Stop all daemons (including detached) and start exactly one |
 | `yazses stop` | Stop the running daemon |
 | `yazses status` | Show daemon status — queries the daemon over IPC when reachable |
-| `yazses doctor` | Check system prerequisites (mic, AT-SPI, injection backend, permissions) |
-| `yazses enroll` | Calibrate your microphone — records 20 utterances to tune `vad_threshold` and `min_silence_ms` |
-| `yazses mic-level` | Measure mic speech level and recommend (or set with `--set`) the VAD threshold |
-| `yazses overlay` | Launch the sonar voice-activity overlay in the foreground (requires `overlay` extra) |
-| `yazses inject TEXT` | Type arbitrary text into the focused window — useful to test injection without speaking |
-| `yazses test` | End-to-end self-test: focuses a window and types `YazSes OK` to confirm injection works |
+| `yazses doctor` | Check prerequisites (version, daemon, model, mic, injection backend, permissions) |
+| `yazses enroll` | Calibrate your microphone — tunes `vad_threshold` for your voice and room |
+| `yazses mic-level` | Measure mic speech level and recommend (or `--set`) the VAD threshold |
+| `yazses features` | List capabilities and toggle them (`enable`/`disable <name>`) |
+| `yazses vocab` | Personal dictionary of mis-heard words (`add`/`list`/`remove`) |
+| `yazses hotkey` | Show or change the hold-to-talk key (`set`) and the dedicated command key (`command`) |
+| `yazses overlay` | Launch the sonar voice-activity overlay (requires the `overlay` extra) |
+| `yazses inject TEXT` | Type arbitrary text into the focused window — test injection without speaking |
+| `yazses say TEXT` | Speak text aloud (offline TTS) |
+| `yazses test` | End-to-end self-test: focuses a window and types `YazSes OK` |
 | `yazses logs` | Show the daemon diagnostic log (metadata only — no dictated text is stored) |
 | `yazses mark-wrong` | Flag the last dictation as a misrecognition (feeds the learning corpus) |
 | `yazses tune` | Analyse the learning corpus and propose accuracy improvements; `--apply` to write changes |
 | `yazses corpus` | Manage the local learning corpus (`status`, `forget`, `destroy`) |
-| `yazses model` | Download and manage SLM intent-routing models |
+| `yazses model` | List or download the optional SLM intent-routing model |
 | `yazses remote HOST` | Forward voice typing to a remote host over SSH |
 
 ---
@@ -161,35 +181,38 @@ Config file location:
 | macOS | `~/Library/Application Support/yazses/config.toml` |
 | Windows | `%APPDATA%\yazses\config.toml` |
 
-Essential settings:
+Prefer `yazses features` / `yazses hotkey` / `yazses vocab` to edit config safely (they preserve comments). Essential settings:
 
 ```toml
-[hotkey]
-key = "auto"               # Space (Linux) / right_option (macOS) / right_ctrl (Windows)
-hold_threshold_ms = 500    # how long to hold before recording starts
-
-[llm]
-model_path = ""            # empty = use the model from `yazses model pull`
-
 [stt]
-backend = "auto"           # "moonshine" (fast) | "whisper" (accurate) | "auto"
+model = "small.en"          # tiny.en (fast) | base.en | small.en (accurate); CPU int8
+initial_prompt = ""         # vocabulary/context primed into Whisper
+
+[hotkey]
+key = "space"               # hold-to-talk key (yazses hotkey set <key>)
+command_key = ""            # optional dedicated key that forces command mode
+hold_threshold_ms = 500     # how long to hold before recording starts
 
 [audio]
-device = ""                # empty = system default microphone
+sample_rate = 16000
+max_record_seconds = 90
 
-[memory]
-passphrase = ""            # set a passphrase to encrypt the memory store
+[injection]
+backend = "auto"            # auto | xdotool | ydotool | wtype | clipboard
+
+[accessibility]
+vad_threshold = 0.0008      # lower for quiet speech, raise if room noise triggers (yazses mic-level --set)
 ```
 
-See the [CLI reference](docs/cli-reference.md) for all options.
+See the [CLI reference](docs/cli-reference.md) and [`examples/config.example.toml`](examples/config.example.toml) for all options.
 
 ### Microphone not working?
 
-If YazSes does nothing and the log shows `Silent audio -- discarding`:
+If YazSes does nothing and the log shows `Silent audio -- discarding`, your speech is below the VAD threshold:
 
 ```sh
 yazses mic-level --set   # measure your voice and set the right threshold
-yazses stop && yazses start
+yazses restart
 ```
 
 ---
@@ -199,40 +222,34 @@ yazses stop && yazses start
 ### Linux
 
 ```bash
-# APT repo — Debian / Ubuntu (recommended)
+# APT script — Debian / Ubuntu (recommended)
 bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
 
-# PPA — Ubuntu
-sudo add-apt-repository ppa:novafabric/yazses && sudo apt install yazses
-
-# Snap
+# Snap — any distro
 sudo snap install yazses --classic
 
-# AUR — Arch / Manjaro
-yay -S yazses
-
-# pipx (Python v0.4.x)
-sudo apt install libportaudio2 xdotool xclip pipx
+# pipx — any distro with Python ≥ 3.11
+sudo apt install libportaudio2 xdotool xclip pipx   # Debian/Ubuntu runtime deps
 pipx install yazses
 ```
 
 ### macOS
 
 ```sh
-# Homebrew Cask (recommended)
-brew tap novafabric/yazses && brew install --cask yazses
+# pipx (Python ≥ 3.11)
+pipx install yazses
 
-# Direct download
+# App bundle (.dmg) — unsigned developer preview
 # https://github.com/novafabric/yazses/releases/latest
 ```
 
 ### Windows
 
 ```powershell
-# winget (recommended)
-winget install NovaFabric.YazSes
+# pipx (Python ≥ 3.11)
+pipx install yazses
 
-# Direct download
+# Installer (.exe) — unsigned developer preview
 # https://github.com/novafabric/yazses/releases/latest
 ```
 
@@ -248,7 +265,7 @@ winget install NovaFabric.YazSes
 | [CLI reference](docs/cli-reference.md) | All commands and flags |
 | [Plugin SDK](docs/plugin-sdk.md) | Adding custom tools and voice commands |
 | [Privacy statement](docs/privacy-statement.md) | What stays on-device, what is never collected |
-| [Migration v0.4 → v1.0](docs/migration-v04-to-v10.md) | Upgrading from the Python version |
+| [Migration v0.4 → v1.0](docs/migration-v04-to-v10.md) | Upgrading from earlier Python versions |
 
 ---
 

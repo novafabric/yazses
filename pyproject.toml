@@ -10,9 +10,28 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 authors = [
-    {name = "Mohsen Seyedkazemi Moghadam", email = "mohsen.seyedkazemi@gmail.com"},
+    {name = "Mohsen Seyedkazemi Ardebili", email = "mohsen.seyedkazemi@gmail.com"},
 ]
-keywords = ["voice", "dictation", "speech-to-text", "whisper", "linux", "accessibility"]
+keywords = [
+    "voice",
+    "dictation",
+    "voice-dictation",
+    "voice-typing",
+    "voice-commands",
+    "speech-to-text",
+    "speech-recognition",
+    "whisper",
+    "faster-whisper",
+    "hold-to-talk",
+    "offline",
+    "on-device",
+    "privacy",
+    "cross-platform",
+    "linux",
+    "macos",
+    "windows",
+    "accessibility",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: No Input/Output (Daemon)",

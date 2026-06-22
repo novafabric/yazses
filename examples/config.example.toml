@@ -23,6 +23,6 @@ fallback_to_clipboard = true
 log_level = "INFO"
 
 [overlay]
-enabled = false            # set to true to show sonar rings near the cursor when you speak
+enabled = true             # on by default; sonar rings near the cursor when you speak (needs the `overlay` extra / PySide6)
 style = "sonar"            # sonar | dot
 position = "cursor"        # cursor | fixed
