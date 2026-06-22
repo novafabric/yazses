@@ -29,6 +29,11 @@ except ImportError:  # pragma: no cover - non-Windows
 
 log = logging.getLogger(__name__)
 
+# Windows byte-range locks are mandatory, so we lock a single byte far past any
+# file content. That guarantees mutual exclusion between daemons while leaving
+# the PID bytes at offset 0 freely readable (a byte-0 lock would block readers).
+_WIN_LOCK_OFFSET = 1 << 30
+
 
 class SingleInstanceLock:
     """Exclusive file lock guarding against a second daemon."""
@@ -54,9 +59,9 @@ class SingleInstanceLock:
             except OSError:
                 os.close(fd)
                 return False
-        elif msvcrt is not None:  # Windows byte-range lock on the first byte
+        elif msvcrt is not None:  # Windows byte-range lock, far past any content
             try:
-                os.lseek(fd, 0, os.SEEK_SET)
+                os.lseek(fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
                 msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
             except OSError:
                 os.close(fd)
@@ -66,9 +71,7 @@ class SingleInstanceLock:
             pid = str(os.getpid()).encode()
             os.lseek(fd, 0, os.SEEK_SET)
             os.write(fd, pid)
-            # Trim any stale bytes from a previous run; keeps byte 0 (the locked
-            # byte) intact since len(pid) >= 1.
-            os.ftruncate(fd, len(pid))
+            os.ftruncate(fd, len(pid))  # trim stale bytes from a previous run
         except OSError:  # pragma: no cover - diagnostic write only
             pass
         self._fd = fd
@@ -82,7 +85,7 @@ class SingleInstanceLock:
             if fcntl is not None:
                 fcntl.flock(self._fd, fcntl.LOCK_UN)
             elif msvcrt is not None:
-                os.lseek(self._fd, 0, os.SEEK_SET)
+                os.lseek(self._fd, _WIN_LOCK_OFFSET, os.SEEK_SET)
                 msvcrt.locking(self._fd, msvcrt.LK_UNLCK, 1)
         except OSError:  # pragma: no cover
             pass
