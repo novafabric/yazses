@@ -1,34 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#6366f1"/>
-      <stop offset="1" stop-color="#4338ca"/>
+    <linearGradient id="bubble" x1="96" y1="120" x2="416" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1f63c8"/>
+      <stop offset="1" stop-color="#17b6d4"/>
     </linearGradient>
-    <linearGradient id="mic" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#e0e7ff"/>
+    <linearGradient id="wave" x1="246" y1="0" x2="372" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="0.55" stop-color="#3b6fe0"/>
+      <stop offset="1" stop-color="#17b6d4"/>
     </linearGradient>
   </defs>
 
   <!-- rounded-square background -->
-  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#ffffff"/>
 
-  <!-- microphone capsule -->
-  <rect x="206" y="96" width="100" height="186" rx="50" ry="50" fill="url(#mic)"/>
+  <!-- speech bubble outline with tail -->
+  <path d="M156 122
+           H356
+           a64 64 0 0 1 64 64
+           V270
+           a64 64 0 0 1 -64 64
+           H214
+           l-44 56
+           v-56
+           H156
+           a64 64 0 0 1 -64 -64
+           V186
+           a64 64 0 0 1 64 -64 Z"
+        fill="none" stroke="url(#bubble)" stroke-width="22"
+        stroke-linejoin="round"/>
 
-  <!-- mic cradle (arc) -->
-  <path d="M150 236 a106 106 0 0 0 212 0"
-        fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round"/>
+  <!-- Y (navy) -->
+  <g fill="none" stroke="#15366c" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 168 L185 212"/>
+    <path d="M220 168 L185 212"/>
+    <path d="M185 212 L185 288"/>
+  </g>
 
-  <!-- stem -->
-  <rect x="242" y="342" width="28" height="58" rx="14" fill="#ffffff"/>
-  <!-- base -->
-  <rect x="186" y="396" width="140" height="26" rx="13" fill="#ffffff"/>
-
-  <!-- sound waves -->
-  <path d="M392 168 a118 118 0 0 1 0 136"
-        fill="none" stroke="#c7d2fe" stroke-width="20" stroke-linecap="round" opacity="0.95"/>
-  <path d="M120 168 a118 118 0 0 0 0 136"
-        fill="none" stroke="#c7d2fe" stroke-width="20" stroke-linecap="round" opacity="0.95"/>
+  <!-- sound waveform (violet -> cyan) -->
+  <g fill="url(#wave)">
+    <rect x="246" y="198" width="15" height="60"  rx="7.5"/>
+    <rect x="277" y="166" width="15" height="124" rx="7.5"/>
+    <rect x="308" y="150" width="15" height="156" rx="7.5"/>
+    <rect x="339" y="180" width="15" height="96"  rx="7.5"/>
+    <rect x="370" y="200" width="15" height="56"  rx="7.5"/>
+  </g>
 </svg>
