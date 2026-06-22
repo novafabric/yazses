@@ -12,6 +12,8 @@ description: Hold a key, speak, release — your words are transcribed on-device
 [Get it on the Snap Store](https://snapcraft.io/yazses){: .btn }
 [Source on GitHub](https://github.com/novafabric/yazses){: .btn }
 
+![yazses doctor — all green, fully offline](screenshots/yazses-doctor.png)
+
 ## Install
 
 ```sh

@@ -9,6 +9,8 @@
 
 YazSes is an open-source, offline voice-dictation daemon for Linux, macOS, and Windows. It transcribes your speech locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and types the result into whatever window has focus. Use it when you want hands-free dictation and editor/terminal voice commands without sending audio to Google, Apple, or Microsoft.
 
+![yazses doctor — all green, fully offline](docs/screenshots/yazses-doctor.png)
+
 ---
 
 ## Two versions of YazSes
