@@ -262,10 +262,8 @@ pipx install yazses
 | [Install on Linux](docs/install-linux.md) | Detailed Linux guide — permissions, injection backends, service setup |
 | [Install on macOS](docs/macos-install.md) | Gatekeeper, Accessibility, Microphone permissions |
 | [Install on Windows](docs/windows-install.md) | SmartScreen, antivirus exceptions, privacy settings |
-| [CLI reference](docs/cli-reference.md) | All commands and flags |
-| [Plugin SDK](docs/plugin-sdk.md) | Adding custom tools and voice commands |
+| [CLI reference](docs/cli-reference.md) | All commands and flags (incl. macros & vocabulary for custom voice commands) |
 | [Privacy statement](docs/privacy-statement.md) | What stays on-device, what is never collected |
-| [Migration v0.4 → v1.0](docs/migration-v04-to-v10.md) | Upgrading from earlier Python versions |
 
 ---
 

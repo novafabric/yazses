@@ -1,32 +1,29 @@
 # Contributing to YazSes
 
-Thank you for your interest in contributing. YazSes has two parallel implementations — Rust (v1.0, default) and Python (v0.4.x) — so most contributions will target one or the other.
+Thank you for your interest in contributing. The shipping product is the **Python implementation** on the `main` branch — that's where almost all contributions should go. An early-stage **Rust HCI exploration** is paused on the `archive/rust-hci-v1` branch (not built, installed, or maintained); see the "Two versions of YazSes" section in the README.
 
-## Getting started
+## Getting started (Python — the active product)
 
 ```sh
 git clone https://github.com/novafabric/yazses
 cd yazses
-```
-
-### Rust (v1.0)
-
-```sh
-cargo build                   # build all crates
-cargo test --workspace        # run all tests (~94)
-cargo clippy --workspace      # lints
-```
-
-Optional feature flags: `--features whisper`, `--features moonshine`, `--features llama-cpp`, `--features ollama`, `--features silero`.
-
-### Python (v0.4.x)
-
-```sh
 uv sync
-uv run pytest tests/ -v       # run all tests (~246)
-uv run ruff check src tests   # lints
-uv run mypy src               # type checking
+uv run python -m pytest tests/ -v   # run the test suite
+uv run ruff check src tests         # lints
+uv run mypy src                     # type checking
 ```
+
+### Rust HCI exploration (archived)
+
+Only relevant if you are exploring the paused agent prototype:
+
+```sh
+git checkout archive/rust-hci-v1
+cargo build && cargo test --workspace
+cargo clippy --workspace
+```
+
+Optional Rust feature flags: `--features whisper`, `--features moonshine`, `--features llama-cpp`, `--features ollama`, `--features silero`.
 
 ## Before opening a pull request
 
@@ -45,7 +42,7 @@ Open an issue at https://github.com/novafabric/yazses/issues and include:
 
 ## Platform support
 
-If you are adding support for a new platform or injection backend, implement all relevant Protocol interfaces and add a test. See `crates/yazses-inputs/src/protocol.rs` (Rust) or `src/yazses/platform/base.py` (Python) for the interface contracts.
+If you are adding support for a new platform or injection backend, implement all relevant Protocol interfaces and add a test. See `src/yazses/platform/base.py` for the interface contracts (the archived Rust branch has its own under `crates/yazses-inputs/src/protocol.rs`).
 
 ## License
 

@@ -1,5 +1,13 @@
 # Migrating from YazSes v0.4.x to v1.0
 
+> ⚠️ **Historical / archived.** This guide describes migrating to the **Rust-core
+> v1.0** that was explored on the `archive/rust-hci-v1` branch and **never
+> shipped.** The product that actually ships is **Python** (now v1.2.x) on
+> `main` — upgrading within the Python line (`pipx upgrade yazses` /
+> `sudo snap refresh yazses`) needs none of the steps below. Keep this only as a
+> reference for the paused Rust exploration; see the README's "Two versions of
+> YazSes" section.
+
 This guide covers every breaking and non-breaking change between the Python
 v0.4.x release and the Rust-core v1.0 release. Read it top to bottom before
 upgrading; the config and data sections in particular have details that affect

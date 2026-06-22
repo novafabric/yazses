@@ -1,5 +1,12 @@
 # YazSes Plugin SDK
 
+> ⚠️ **This document describes the paused/archived Rust exploration**
+> (`archive/rust-hci-v1` branch), **not the shipping product.** The product you
+> install (Python, `main`) has no Rust-style plugin SDK — extend it instead with
+> voice **macros**, a personal **vocabulary** (`yazses vocab`), and config
+> (`yazses features` / `yazses hotkey`). See the README's "Two versions of
+> YazSes" section for what ships vs. what's archived.
+
 **Codebase version:** v1.0.0-dev.5  
 **Rust edition:** 2021, MSRV 1.85
 

@@ -3,10 +3,11 @@ message: "If you use YazSes in your research or projects, please cite it as belo
 type: software
 title: YazSes
 abstract: >
-  YazSes is an offline, on-device voice agent for Linux, macOS, and Windows.
-  Hold a key, speak a command, release — text is typed, code is committed,
-  files open, notes are saved. Powered by faster-whisper and llama.cpp.
-  No cloud dependency, no API key, no subscription.
+  YazSes is an open-source, offline voice-dictation daemon for Linux, macOS,
+  and Windows. Hold a key, speak, release — speech is transcribed on-device
+  with faster-whisper and typed into the focused application, with support for
+  editor and terminal voice commands. No cloud dependency, no API key, no
+  subscription.
 authors:
   - family-names: Seyedkazemi Ardebili
     given-names: Mohsen
@@ -19,12 +20,11 @@ keywords:
   - speech to text
   - voice typing
   - hold to talk
-  - offline AI
-  - on-device AI
-  - voice agent
+  - voice commands
+  - offline
+  - on-device
   - whisper
   - faster-whisper
-  - llama.cpp
   - accessibility
   - Python
   - Rust
