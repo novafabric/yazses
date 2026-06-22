@@ -50,10 +50,10 @@ You can also define multi-step macros and a personal vocabulary of mis-heard wor
 
 ```sh
 # Linux (Debian/Ubuntu)
-bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install-apt.sh)
 
 # Any distro (snap)
-sudo snap install yazses --classic
+sudo snap install yazses
 
 # Cross-platform (Python >= 3.11)
 pipx install yazses
@@ -105,9 +105,9 @@ yazses start      # start the dictation daemon
 
 ## Project info
 
-- Repository: https://github.com/novafabric/yazses
+- Repository: https://github.com/MSKazemi/yazses
 - PyPI: https://pypi.org/project/yazses/
 - Snap Store: https://snapcraft.io/yazses
-- Issues: https://github.com/novafabric/yazses/issues
+- Issues: https://github.com/MSKazemi/yazses/issues
 - License: Apache 2.0
 - Maintainer: Mohsen Seyedkazemi Ardebili (mohsen.seyedkazemi@gmail.com)

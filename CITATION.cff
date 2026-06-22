@@ -12,8 +12,8 @@ authors:
   - family-names: Seyedkazemi Ardebili
     given-names: Mohsen
     email: mohsen.seyedkazemi@gmail.com
-repository-code: https://github.com/novafabric/yazses
-url: https://github.com/novafabric/yazses
+repository-code: https://github.com/MSKazemi/yazses
+url: https://github.com/MSKazemi/yazses
 license: Apache-2.0
 keywords:
   - voice dictation

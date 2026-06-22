@@ -10,7 +10,7 @@ description: Hold a key, speak, release — your words are transcribed on-device
 
 [Get it on PyPI](https://pypi.org/project/yazses/){: .btn }
 [Get it on the Snap Store](https://snapcraft.io/yazses){: .btn }
-[Source on GitHub](https://github.com/novafabric/yazses){: .btn }
+[Source on GitHub](https://github.com/MSKazemi/yazses){: .btn }
 
 ![yazses doctor — all green, fully offline](screenshots/yazses-doctor.png)
 
@@ -21,7 +21,7 @@ description: Hold a key, speak, release — your words are transcribed on-device
 pipx install yazses
 
 # Linux (Debian/Ubuntu)
-bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install-apt.sh)
 
 # Linux (any distro) — strict snap; keystroke injection works on X11
 sudo snap install yazses
@@ -60,11 +60,11 @@ Hold hotkey → record audio → VAD gate → faster-whisper (CPU)
 
 ## Documentation
 
-- [Install on Linux](https://github.com/novafabric/yazses/blob/main/docs/install-linux.md)
-- [Install on macOS](https://github.com/novafabric/yazses/blob/main/docs/macos-install.md)
-- [Install on Windows](https://github.com/novafabric/yazses/blob/main/docs/windows-install.md)
-- [CLI reference](https://github.com/novafabric/yazses/blob/main/docs/cli-reference.md)
-- [Privacy statement](https://github.com/novafabric/yazses/blob/main/docs/privacy-statement.md)
+- [Install on Linux](https://github.com/MSKazemi/yazses/blob/main/docs/install-linux.md)
+- [Install on macOS](https://github.com/MSKazemi/yazses/blob/main/docs/macos-install.md)
+- [Install on Windows](https://github.com/MSKazemi/yazses/blob/main/docs/windows-install.md)
+- [CLI reference](https://github.com/MSKazemi/yazses/blob/main/docs/cli-reference.md)
+- [Privacy statement](https://github.com/MSKazemi/yazses/blob/main/docs/privacy-statement.md)
 
 ## FAQ
 
@@ -78,4 +78,4 @@ Hold hotkey → record audio → VAD gate → faster-whisper (CPU)
 
 ---
 
-Apache-2.0 licensed. If YazSes is useful to you, a ⭐ on [GitHub](https://github.com/novafabric/yazses) helps others find it.
+Apache-2.0 licensed. If YazSes is useful to you, a ⭐ on [GitHub](https://github.com/MSKazemi/yazses) helps others find it.

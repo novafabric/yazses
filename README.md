@@ -1,6 +1,6 @@
 # YazSes
 
-[![Tests](https://github.com/novafabric/yazses/actions/workflows/test.yml/badge.svg)](https://github.com/novafabric/yazses/actions/workflows/test.yml)
+[![Tests](https://github.com/MSKazemi/yazses/actions/workflows/test.yml/badge.svg)](https://github.com/MSKazemi/yazses/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/yazses)](https://pypi.org/project/yazses/)
 [![Snap Store](https://img.shields.io/snapcraft/v/yazses?logo=snapcraft&label=snap&color=82BEA0)](https://snapcraft.io/yazses)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -43,7 +43,7 @@ This repo holds **one product** with **two implementations** — not two separat
 
 | Platform | Command |
 |---|---|
-| **Linux** (Debian/Ubuntu) | `bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)` |
+| **Linux** (Debian/Ubuntu) | `bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install-apt.sh)` |
 | **Linux** (any distro) | `sudo snap install yazses` |
 | **Any OS** (Python ≥ 3.11) | `pipx install yazses` |
 
@@ -225,7 +225,7 @@ yazses restart
 
 ```bash
 # APT script — Debian / Ubuntu (recommended)
-bash <(curl -fsSL https://raw.githubusercontent.com/novafabric/yazses/main/install-apt.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install-apt.sh)
 
 # Snap — any distro (strict confinement; keystroke injection works on X11.
 # On Wayland, prefer pipx below for full input access.)
@@ -243,7 +243,7 @@ pipx install yazses
 pipx install yazses
 
 # App bundle (.dmg) — unsigned developer preview
-# https://github.com/novafabric/yazses/releases/latest
+# https://github.com/MSKazemi/yazses/releases/latest
 ```
 
 ### Windows
@@ -253,7 +253,7 @@ pipx install yazses
 pipx install yazses
 
 # Installer (.exe) — unsigned developer preview
-# https://github.com/novafabric/yazses/releases/latest
+# https://github.com/MSKazemi/yazses/releases/latest
 ```
 
 ---
@@ -275,7 +275,7 @@ pipx install yazses
 YazSes (Part 1) is a Python project managed with `uv`:
 
 ```bash
-git clone https://github.com/novafabric/yazses
+git clone https://github.com/MSKazemi/yazses
 cd yazses
 uv sync
 uv run python -m pytest tests/ -v
