@@ -20,7 +20,7 @@ This repo holds **one product** with **two implementations** — not two separat
 | | **Part 1 — Python** · `main` | **Rust HCI exploration** · `archive/rust-hci-v1` |
 |---|---|---|
 | What it is | The shipping app — voice dictation, commands, macros | An early-stage rewrite exploring deeper **human–computer interaction**: an on-device *agent* (LLM tool-use, personal memory, editor awareness) |
-| Status | ✅ **Active — current product** (v1.2.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
+| Status | ✅ **Active — current product** (v1.3.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
 | Hold-to-talk dictation | ✅ | ✅ |
 | Offline STT | ✅ faster-whisper (CPU int8) | ✅ Whisper + Moonshine v2 (~9 ms) |
 | Voice commands | ✅ regex grammar (+ optional SLM router) → key sequences | ✅ via LLM tool-calls |

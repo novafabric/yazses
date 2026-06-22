@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { width: 1280px; height: 640px; }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    width: 1280px;
+    height: 640px;
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(1100px 700px at 78% 18%, rgba(23,182,212,0.20), transparent 60%),
+      radial-gradient(900px 600px at 12% 90%, rgba(124,58,237,0.18), transparent 55%),
+      linear-gradient(135deg, #060a1f 0%, #0a1230 45%, #0b1838 100%);
+    color: #eaf2ff;
+  }
+
+  /* faint grid */
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(900px 600px at 70% 30%, #000 30%, transparent 80%);
+  }
+
+  /* sonar rings, echoing the live overlay feature */
+  .sonar { position: absolute; right: 150px; top: 300px; }
+  .sonar span {
+    position: absolute; border-radius: 50%;
+    border: 2px solid rgba(23,182,212,0.35);
+    transform: translate(-50%, -50%);
+  }
+  .r1 { width: 120px; height: 120px; border-color: rgba(124,58,237,0.55); }
+  .r2 { width: 240px; height: 240px; border-color: rgba(59,111,224,0.40); }
+  .r3 { width: 380px; height: 380px; border-color: rgba(23,182,212,0.26); }
+  .r4 { width: 530px; height: 530px; border-color: rgba(23,182,212,0.13); }
+
+  .wrap {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 86px;
+  }
+
+  .brand { display: flex; align-items: center; gap: 30px; }
+
+  .icon {
+    width: 132px; height: 132px; border-radius: 30px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06);
+    flex: 0 0 auto;
+  }
+
+  .wordmark {
+    font-weight: 900;
+    font-size: 116px;
+    letter-spacing: -3px;
+    line-height: 1;
+  }
+  .wordmark .yaz { color: #ffffff; }
+  .wordmark .ses {
+    background: linear-gradient(90deg, #7c3aed 0%, #3b6fe0 45%, #17b6d4 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  .tagline {
+    margin-top: 30px;
+    font-size: 40px; font-weight: 600;
+    color: #cfe0f7; letter-spacing: -0.4px;
+  }
+  .tagline b { color: #ffffff; font-weight: 800; }
+
+  .sub {
+    margin-top: 14px;
+    font-size: 25px; font-weight: 500; color: #8ea6c8;
+  }
+
+  .chips { margin-top: 40px; display: flex; gap: 16px; }
+  .chip {
+    font-size: 24px; font-weight: 600;
+    padding: 11px 24px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.05);
+    color: #dbe8fb;
+    display: flex; align-items: center; gap: 11px;
+  }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .d1 { background: #7c3aed; }
+  .d2 { background: #3b6fe0; }
+  .d3 { background: #17b6d4; }
+
+  .cmd {
+    position: absolute; right: 86px; bottom: 64px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px; color: #6f86a8;
+    border-left: 3px solid #17b6d4; padding-left: 16px;
+  }
+  .cmd .p { color: #17b6d4; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="sonar"><span class="r1"></span><span class="r2"></span><span class="r3"></span><span class="r4"></span></div>
+
+  <div class="wrap">
+    <div class="brand">
+      <img class="icon" src="yazses.svg" alt="YazSes">
+      <div class="wordmark"><span class="yaz">Yaz</span><span class="ses">Ses</span></div>
+    </div>
+
+    <div class="tagline"><b>Offline, hold-to-talk voice dictation</b></div>
+    <div class="sub">Private, on-device speech-to-text for Linux, macOS &amp; Windows — no cloud.</div>
+
+    <div class="chips">
+      <div class="chip"><span class="dot d1"></span>Private &amp; offline</div>
+      <div class="chip"><span class="dot d2"></span>faster-whisper</div>
+      <div class="chip"><span class="dot d3"></span>Open source</div>
+    </div>
+  </div>
+
+  <div class="cmd"><span class="p">$</span> pipx install yazses</div>
+</body>
+</html>
