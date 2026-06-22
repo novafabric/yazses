@@ -37,7 +37,14 @@ def load_or_create_key(data_dir: Path) -> bytes:
 
     key = os.urandom(_KEY_BYTES)
     # Write with restrictive perms from the start, never widening the window.
-    fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # O_BINARY (Windows only; 0 elsewhere) avoids text-mode CRLF translation that
+    # would expand a 0x0A byte in the random key to 0x0D 0x0A, corrupting it to
+    # 33+ bytes ("key must be 32 bytes, got 33").
+    fd = os.open(
+        key_file,
+        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0),
+        0o600,
+    )
     try:
         os.write(fd, key)
     finally:

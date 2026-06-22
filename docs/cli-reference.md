@@ -138,9 +138,10 @@ After a successful update, restart the daemon to load it:
 ## Voice-activity overlay (sonar)
 
 A standalone process that draws neon "sonar" rings near the cursor, expanding and
-pulsing with your live voice level while you dictate. Requires the `overlay`
-extra (PySide6): `uv sync --extra overlay` or `pip install 'yazses[overlay]'`.
-For true see-through rings on X11 you need a compositor (e.g. `picom`) running.
+pulsing with your live voice level while you dictate. PySide6 ships in the base
+install (and is bundled in the snap), so the overlay works out of the box — no
+extra step. For true see-through rings on X11 you need a compositor (e.g.
+`picom`) running.
 
 | Command | Description |
 |---|---|

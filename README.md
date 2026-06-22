@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/novafabric/yazses/actions/workflows/test.yml/badge.svg)](https://github.com/novafabric/yazses/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/yazses)](https://pypi.org/project/yazses/)
-[![Snap Store](https://snapcraft.io/en/dark/install.svg)](https://snapcraft.io/yazses)
+[![Snap Store](https://img.shields.io/snapcraft/v/yazses?logo=snapcraft&label=snap&color=82BEA0)](https://snapcraft.io/yazses)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 **Hold a key → speak → release.** On-device voice dictation that types into any app, plus voice commands and macros — entirely offline. No cloud. No API key. No subscription.

@@ -110,13 +110,10 @@ Config lives at `~/.config/yazses/config.toml`. See the
 ## 7. Voice-activity overlay
 
 The overlay draws neon "sonar" rings near the cursor that pulse with your voice
-while you dictate. It is **on by default** — you only need to install the extra
-that ships PySide6 (kept optional so the base install never fails on older distros
-without a Qt6 wheel; the wheels need glibc ≥ 2.28, i.e. Ubuntu 20.04+):
-
-```bash
-uv tool install 'yazses[overlay]'     # adds PySide6
-```
+while you dictate. It is **on by default** and works out of the box: PySide6 is
+part of the base install (and bundled in the snap), so there is no extra step.
+The PySide6 wheels need glibc ≥ 2.28 (Ubuntu 20.04+); on older distros the
+daemon logs a one-line hint and keeps dictating.
 
 The daemon then auto-launches `yazses-overlay` on start when a display is present
 and terminates it on shutdown. If PySide6 isn't installed the daemon logs a
