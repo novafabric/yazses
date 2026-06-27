@@ -27,10 +27,18 @@ bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install
 sudo snap install yazses
 ```
 
+**Linux only — runtime deps + keyboard access (the `install-apt.sh` / APT path does all of this for you).** For the `pipx` install, install the system tools and add yourself to the `input` group:
+
+```sh
+# libportaudio2 = audio (required); xdotool/xclip = X11; wtype/ydotool/wl-clipboard = Wayland
+sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
+sudo usermod -aG input "$USER"   # hotkey needs input-group access; then log out and back in (or reboot)
+```
+
 Then:
 
 ```sh
-yazses doctor     # check mic, injection backend, permissions
+yazses doctor     # check mic, injection backend, permissions (want [OK] Keyboard capture)
 yazses enroll     # calibrate your microphone (~30 s)
 yazses start      # start the dictation daemon
 ```

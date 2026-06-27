@@ -55,6 +55,19 @@ sudo apt-get update
 info "Installing YazSes..."
 sudo apt-get install -y yazses
 
+# The .deb declares libportaudio2 + pipx hard, but injection/clipboard are
+# alternatives (xdotool | ydotool | wtype, xclip | wl-clipboard) so apt installs
+# only the first. Install the full set explicitly so dictation works on BOTH X11
+# (xdotool/xclip) and Wayland (wtype/ydotool/wl-clipboard) regardless of session.
+# libportaudio2 is listed again for the belt-and-braces case. Tolerate any single
+# package being absent on older releases — YazSes only needs one backend per role.
+info "Installing audio + input/clipboard backends (X11 and Wayland)..."
+for pkg in libportaudio2 xdotool ydotool wtype xclip wl-clipboard; do
+  sudo apt-get install -y "$pkg" >/dev/null 2>&1 \
+    && info "  installed $pkg" \
+    || warn "  $pkg unavailable on this release (skipped)"
+done
+
 if ! groups "$USER" | grep -qw input; then
   info "Adding $USER to the input group for keyboard access..."
   sudo usermod -aG input "$USER"

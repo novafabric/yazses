@@ -10,10 +10,50 @@ configuration. Tested on X11 + PipeWire.
 yazses doctor   # after install, but the checks apply: xdotool, mic, input group
 ```
 
-- **`xdotool`** (X11) or **`ydotool`/`wtype`** (Wayland) for text injection.
-- Membership in the **`input`** group so the daemon can read the keyboard via
-  evdev: `sudo usermod -aG input "$USER"` then log out/in.
-- A working microphone (PipeWire/PulseAudio/ALSA).
+**For the `pipx`/`uv tool` installs below, install every runtime dependency in one
+command** (the APT `.deb` pulls these in automatically, so skip this if you used
+`install-apt.sh`):
+
+```bash
+sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
+```
+
+What each is for:
+
+| Package | Role | Needed when |
+|---|---|---|
+| `libportaudio2` | Audio capture — `sounddevice` loads it at import | **Always** (else the daemon crashes on start: `OSError: PortAudio library not found`) |
+| `xdotool` | Text injection (X11) | X11 sessions |
+| `xclip` | Clipboard fallback (X11) | X11 sessions |
+| `wtype` / `ydotool` | Text injection (Wayland) | Wayland sessions |
+| `wl-clipboard` | Clipboard fallback (Wayland) — provides `wl-copy` | Wayland sessions |
+| `pipx` | Installs the `yazses` CLI | If installing via `pipx` |
+
+Installing all of them makes YazSes work whether you log into X11 or Wayland —
+at runtime YazSes auto-selects the right backend (`inject/auto.py`). You also
+need membership in the **`input`** group (step 1a) and a working microphone
+(PipeWire/PulseAudio/ALSA).
+
+### 1a. Add yourself to the `input` group (required)
+
+The hold-to-talk hotkey is read directly from the kernel input devices
+(`/dev/input/event*`), which are owned by the `input` group. If your user is not
+in that group the daemon **cannot detect the hotkey** and dictation never starts
+(`yazses doctor` reports `[FAIL] Keyboard capture: denied`).
+
+```bash
+sudo usermod -aG input "$USER"   # add yourself to the input group
+```
+
+Then **log out and back in (or reboot)** — group membership only refreshes on a
+new login session. Confirm it took effect:
+
+```bash
+id -nG | tr ' ' '\n' | grep -x input   # should print: input
+yazses doctor                          # should show [OK] Keyboard capture
+```
+
+Do this **before** starting the daemon (step 3).
 
 ## 2. Install the CLI globally
 

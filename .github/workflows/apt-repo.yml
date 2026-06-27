@@ -2,7 +2,7 @@ name: APT Repository
 
 on:
   workflow_run:
-    workflows: ["Release", "Rust Release"]
+    workflows: ["Release"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -11,9 +11,9 @@ on:
         required: false
         default: ""
       workflow:
-        description: "Source workflow (release or rust-release)"
+        description: "Source workflow (release)"
         required: false
-        default: "rust-release"
+        default: "release"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -43,7 +43,7 @@ jobs:
         run: |
           MANUAL_ID="${{ github.event.inputs.run_id }}"
           EVENT_ID="${{ github.event.workflow_run.id }}"
-          WORKFLOW="${{ github.event.inputs.workflow || 'rust-release' }}"
+          WORKFLOW="${{ github.event.inputs.workflow || 'release' }}"
           # Map friendly name to filename
           case "$WORKFLOW" in
             release)       WF_FILE="release.yml" ;;

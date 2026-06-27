@@ -47,7 +47,20 @@ This repo holds **one product** with **two implementations** — not two separat
 | **Linux** (any distro) | `sudo snap install yazses` |
 | **Any OS** (Python ≥ 3.11) | `pipx install yazses` |
 
-**Step 2 — Set up**
+**Step 2 — Linux prerequisites** *(required for the `pipx`/`snap` installs — the APT script does all of this for you)*
+
+```sh
+# All runtime tools in one go (apt picks what your session needs at runtime):
+sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
+sudo usermod -aG input "$USER"   # input group — the hotkey is read from the kernel input devices
+# then log out and back in (or reboot) for the group change to take effect
+```
+
+What each provides: `libportaudio2` = audio capture (**required** — without it the daemon crashes on start with `OSError: PortAudio library not found`); `xdotool`+`xclip` = X11 text injection + clipboard; `wtype`/`ydotool`+`wl-clipboard` = the Wayland equivalents; `pipx` = the installer. The hotkey won't fire without the `input` group. Do all of this **before** `yazses start`.
+
+> Verify with `yazses doctor` — you want `[OK] Keyboard capture` and `[OK] Microphone`. macOS/Windows skip this step (grant Accessibility/permissions when prompted instead — see below).
+
+**Step 3 — Set up**
 
 ```sh
 yazses doctor               # check mic, injection backend, permissions
@@ -55,7 +68,7 @@ yazses enroll               # calibrate your microphone (~30 seconds)
 yazses start                # start the dictation daemon
 ```
 
-**Step 3 — Use it** — hold the hotkey, speak, release. The text is typed into the focused app.
+**Step 4 — Use it** — hold the hotkey, speak, release. The text is typed into the focused app.
 
 | OS | Hold this key | Say… |
 |---|---|---|
@@ -68,8 +81,6 @@ Release the key — YazSes transcribes and acts within about a second.
 > **First time on macOS?** v0 builds are unsigned: right-click the app → Open (Gatekeeper), then grant Accessibility + Microphone when prompted.
 >
 > **First time on Windows?** If SmartScreen warns you, click **More info → Run anyway**.
->
-> **First time on Linux?** Run `sudo usermod -aG input "$USER"` and re-login before starting.
 
 ---
 
@@ -232,7 +243,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install
 sudo snap install yazses
 
 # pipx — any distro with Python ≥ 3.11
-sudo apt install libportaudio2 xdotool xclip pipx   # Debian/Ubuntu runtime deps
+# Debian/Ubuntu runtime deps. libportaudio2 = audio capture (required);
+# xdotool/xclip = X11 injection+clipboard; wtype/ydotool/wl-clipboard = Wayland.
+# Installing all of them makes YazSes work on either session type.
+sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
+sudo usermod -aG input "$USER"   # hotkey access — then log out and back in
 pipx install yazses
 ```
 
