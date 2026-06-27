@@ -1,0 +1,43 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64 arm64 all
+Codename: stable
+Components: main
+Date: Sat, 27 Jun 2026 16:00:04 +0000
+Description: YazSes APT Repository
+Label: YazSes
+Origin: YazSes
+Suite: stable
+MD5Sum:
+ 2d02ce44de66daf1d1e95a46164a9642              835 Packages
+ 3f161be2f40ca8fc5c7e897c1c239f4b              599 Packages.gz
+ 4f2e3bbe186f04040eeb61d7f0bd358a              181 Release
+SHA1:
+ d99ede4dfcbc9cb36fbd232bc144bfb9a659a845              835 Packages
+ 20a979d5e566b198bb12cfc4a8c2c0a6921f2d17              599 Packages.gz
+ df44fa8dd9b7f0d4be0897d54ba7f40d5c37c282              181 Release
+SHA256:
+ 8d563f114eeb8debb06af464dbc72a667f20144bd83b515c86731c626d139205              835 Packages
+ 6caae0b42888e531d5e8de3c43597d41839a43d8765f6f6e63712774ddab62be              599 Packages.gz
+ d0316f5e906eba3da166165885fbf8155cd4749412d3385be508f5611be98ea4              181 Release
+SHA512:
+ 3505becdb9c44e403dd43d3423563228824bf79e3f2de1e2cb81471051fcb1cbff0164bae866f30b1894bdac3076098dbfe429b7ca863a122b4075053578b60d              835 Packages
+ 87738a08c8c412cc085e76d51e25b9bb5af424dd0202eab701793b05cbee675c5f62ff4755ca117a97e9b1e579017cbc096ea30a5fe3092753b7586f6ea90601              599 Packages.gz
+ 55971eef528f2a8e7269305dfde85a1563dabdb4edbe5b7ce0a9465bd2aaead04cc79877a5e472061dcc1ea881c6f42c88399e61b9bb8f4b2b326c093535f567              181 Release
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEElwPRaJGQeuuvsGEOiSno3EcGM6EFAmo/84QACgkQiSno3EcG
+M6EYrg/9HZzSz7WvELunO1iOBT/Ew/PtZqR+Gw1JX6r8O0Bt6Myx02/BuLxeVHAq
+MwJ9IJI6j6bOgx620wqSWn8kP2nr/Nx8xodg5y+XFeegKpcZCI9v5KnBzstGlv2O
+bR8IWU5EA9SC19wQbDgUgrHTj1c/YG4xO1RteB92Jply7iXFTGEeB/LRhNt9U/ei
+UbmWLF8/aKbjiqqSN6sx77Khxt9BgDOduRHvHEY6l1ra5ucD84azg36nEbaEyTPf
+CqAqsErB17MgLJdzSx5WAt6+ATlsACsw7WIkmZCWpiwK8iRjW3GR80Lw3R07VIIg
+KBDGY5s0UngVfSDUw/MHCP6jso9XT/ZxJXDXXD6wMuRpFAybV7jLbQZ2IRKzZtvF
+4jg5p9rqSeDSHOz+7Kr9vYYC2q87r1n8oW5qpgBFnyGdIJI9GZ8o2mTV7Tj8Gv6e
+uTz7Hc1ByokfYZ6gwUBUhLY/AT2UoupSZ9wkP1kq9irWbip54PsANo6Uf0qFhpp5
+ZoNW0rEyjkgSCklz7BS1X4LZCU+ObaytPZjLIIxL2lbed1tvv89VgAB4RI72us1g
+tjE1rewX7avZzbUVleb69irfzOLuBBh80ZJveDcKsKSc7C+yc/Nmc3sg8ZQUjMNC
+umTyTCdp/2TQJv2siKpKK/gpKehK3LLt06+QraWnsHBZzj9WWk8=
+=oj4E
+-----END PGP SIGNATURE-----
