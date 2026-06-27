@@ -232,6 +232,117 @@ def _mic_level_check(cfg, seconds: float = 2.0) -> _Check:
     )
 
 
+def _hotkey_device_check(cfg) -> _Check | None:
+    """Report which /dev/input device the hotkey will bind to (Linux/evdev).
+
+    Catches the silent failure where the daemon binds to an injector's virtual
+    uinput device (e.g. "ydotoold virtual device") instead of the real keyboard:
+    that device only ever carries synthetic events, so holding the hotkey does
+    nothing. Returns None off Linux or when evdev is unavailable.
+    """
+    if sys.platform != "linux":
+        return None
+    try:
+        from yazses.hotkeys.evdev_hold import EvdevHoldListener, _is_virtual_device
+        from yazses.platform.linux.hotkey import resolve_key_id
+    except Exception:
+        return None
+    key_id = cfg.hotkey.key if cfg is not None else "space"
+    try:
+        _, code = resolve_key_id(key_id)
+    except Exception:
+        return ("Hotkey device", "WARN", f"unknown hotkey {key_id!r}")
+    try:
+        listener = EvdevHoldListener(200, lambda _l: None, lambda: None, key_code=code)
+        dev = listener._find_keyboard()
+    except Exception as exc:
+        # Permission / no-device issues are already surfaced by "Keyboard capture".
+        return ("Hotkey device", "SKIP", f"could not enumerate input devices ({exc})")
+    if _is_virtual_device(dev):
+        return (
+            "Hotkey device", "FAIL",
+            f"bound to virtual device {dev.name!r} — real keypresses are not seen. "
+            "Ensure your keyboard is in /dev/input and you are in the 'input' group.",
+        )
+    return ("Hotkey device", "OK", f"{dev.name} ({dev.path})")
+
+
+def _yazses_paths_on_path() -> list[str]:
+    """Distinct resolved paths of `yazses` executables found on PATH (which -a)."""
+    seen: list[str] = []
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        if not d:
+            continue
+        cand = Path(d) / "yazses"
+        if cand.exists():
+            real = str(cand.resolve())
+            if real not in seen:
+                seen.append(real)
+    return seen
+
+
+def _systemd_execstart() -> str | None:
+    """The ExecStart binary path of the `yazses` user service, or None.
+
+    None when not systemd-managed (no unit / not Linux / systemctl unavailable).
+    """
+    import re
+    import subprocess
+
+    if sys.platform != "linux":
+        return None
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "show", "yazses", "-p", "ExecStart", "--value"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        return None
+    out = r.stdout.strip()
+    if not out:
+        return None
+    m = re.search(r"path=([^\s;]+)", out)
+    return m.group(1) if m else None
+
+
+def _install_consistency_checks() -> list[_Check]:
+    """Catch the deployment traps that make a daemon silently run wrong/old code:
+    multiple installs on PATH, and a systemd ExecStart that points at a missing
+    or different binary (the `203/EXEC` crash-loop)."""
+    if sys.platform != "linux":
+        return []
+    out: list[_Check] = []
+
+    paths = _yazses_paths_on_path()
+    if len(paths) > 1:
+        out.append((
+            "Install", "WARN",
+            "multiple yazses on PATH (" + ", ".join(paths) + ") — keep one "
+            "(uninstall the extras) so updates can't leave stale copies behind",
+        ))
+
+    exec_path = _systemd_execstart()
+    if exec_path is not None:
+        if not Path(exec_path).exists():
+            out.append((
+                "systemd unit", "FAIL",
+                f"ExecStart={exec_path} does not exist — the service crash-loops "
+                "(status 203/EXEC) and `yazses start`/`restart` start nothing. "
+                "Point the unit at your real binary or reinstall.",
+            ))
+        else:
+            daemon = shutil.which("yazses-daemon")
+            if daemon and str(Path(daemon).resolve()) != str(Path(exec_path).resolve()):
+                out.append((
+                    "systemd unit", "WARN",
+                    f"ExecStart={exec_path} differs from the yazses-daemon on PATH "
+                    f"({daemon}) — the service may run a different or older build",
+                ))
+            else:
+                out.append(("systemd unit", "OK", f"ExecStart={exec_path}"))
+    return out
+
+
 def run_doctor(check_mic: bool = False, mic_seconds: float = 2.0) -> None:
     platform = get_platform()
     perms = platform.permissions
@@ -254,6 +365,10 @@ def run_doctor(check_mic: bool = False, mic_seconds: float = 2.0) -> None:
     checks.append(_version_check())
     checks.append(_daemon_check(platform))
 
+    # Install/lifecycle sanity: duplicate installs + a systemd ExecStart that
+    # points at a missing/different binary (the silent "restart starts nothing").
+    checks.extend(_install_consistency_checks())
+
     # Keyboard capture
     kb = perms.check_keyboard_capture()
     checks.append((
@@ -261,6 +376,12 @@ def run_doctor(check_mic: bool = False, mic_seconds: float = 2.0) -> None:
         "OK" if kb is PermissionState.OK else "FAIL",
         kb.value if kb is PermissionState.OK else f"{kb.value} — {perms.how_to_grant()}",
     ))
+
+    # Which input device the hotkey actually binds to (real keyboard vs a virtual
+    # injector device). Surfaces the dead-hotkey failure mode directly.
+    hotkey_dev = _hotkey_device_check(cfg)
+    if hotkey_dev is not None:
+        checks.append(hotkey_dev)
 
     # Microphone
     mic = perms.check_microphone()
