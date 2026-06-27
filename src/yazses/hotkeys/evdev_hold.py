@@ -36,11 +36,19 @@ class EvdevHoldListener:
         on_hold_start: Callable[[int], None],
         on_hold_end: Callable[[], None],
         key_code: int = ecodes.KEY_SPACE,
+        produces_char: bool = False,
     ) -> None:
         self._detector = HoldDetector(threshold_ms=threshold_ms)
         self._on_hold_start = on_hold_start
         self._on_hold_end = on_hold_end
         self._key_code = key_code
+        # Character-producing keys (e.g. space) type a character before we can
+        # tell a hold from a tap, so they use the hold-threshold gate and the
+        # leaked-character cleanup. Modifier keys (right_alt, right_ctrl, …) type
+        # nothing, so we start the instant they go down — waiting for the
+        # threshold there only clips the first words of speech (the threshold
+        # fires on a kernel key-repeat event ~0.5 s after the press).
+        self._produces_char = produces_char
         self._recording = False
         self._stopping = False
         self._keyboard: evdev.InputDevice | None = None
@@ -79,6 +87,35 @@ class EvdevHoldListener:
             "Ensure you are in the 'input' group: sudo usermod -aG input $USER"
         )
 
+    def _handle_event(self, value: int, t: float) -> None:
+        """Process one EV_KEY event for the hotkey. Extracted from run() so the
+        press/repeat/release state machine is unit-testable without evdev."""
+        if value in (1, 2):  # press (1) or key-repeat (2)
+            if value == 1:  # only the initial press counts as a leaked char
+                self._detector.on_press(t)
+            if self._recording:
+                return
+            if self._produces_char:
+                # Tap vs hold can only be told after the threshold (the typed
+                # character is cleaned up via leaked_count).
+                if self._detector.check(t):
+                    leaked = self._detector.leaked_count
+                    self._recording = True
+                    log.debug("Hold detected, leaked count: %d", leaked)
+                    self._on_hold_start(leaked)
+            elif value == 1:
+                # Modifier key: start on key-down so voice onset isn't clipped.
+                self._recording = True
+                log.debug("Hold start (modifier key, no leaked chars)")
+                self._on_hold_start(0)
+
+        elif value == 0:  # release
+            was_recording = self._recording
+            self._recording = False
+            self._detector.reset()
+            if was_recording:
+                self._on_hold_end()
+
     def run(self) -> None:
         self._keyboard = self._find_keyboard()
         try:
@@ -87,24 +124,7 @@ class EvdevHoldListener:
                     break
                 if event.type != ecodes.EV_KEY or event.code != self._key_code:
                     continue
-
-                t = time.monotonic()
-
-                if event.value in (1, 2):  # press (1) or key-repeat (2)
-                    if event.value == 1:  # only count the initial press as a leak
-                        self._detector.on_press(t)
-                    if not self._recording and self._detector.check(t):
-                        self._recording = True
-                        leaked = self._detector.leaked_count
-                        log.debug("Hold detected, leaked count: %d", leaked)
-                        self._on_hold_start(leaked)
-
-                elif event.value == 0:  # release
-                    was_recording = self._recording
-                    self._recording = False
-                    self._detector.reset()
-                    if was_recording:
-                        self._on_hold_end()
+                self._handle_event(event.value, time.monotonic())
         except OSError:
             # stop() closes the device fd, which makes read_loop raise.
             if not self._stopping:

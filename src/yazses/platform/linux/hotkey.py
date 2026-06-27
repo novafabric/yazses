@@ -66,6 +66,7 @@ class LinuxHotkey:
             on_hold_start=_wrapped_start,
             on_hold_end=on_hold_end,
             key_code=key_code,
+            produces_char=self._produces_char,
         )
 
     def run(self) -> None:

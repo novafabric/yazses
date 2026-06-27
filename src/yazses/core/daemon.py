@@ -483,12 +483,11 @@ class Daemon:
         try:
             audio = self._recorder.stop()
 
-            # Accumulate in ring buffer; build padded audio for VAD
-            if self._padding_buffer is not None:
-                self._padding_buffer.push(audio)
-                padded = self._padding_buffer.prepend_padding(audio)
-            else:
-                padded = audio
+            # Modifier hotkeys start recording on key-down, so voice onset is
+            # already in `audio`. (The old code pushed this recording into the
+            # ring buffer and then prepended that same tail to its own front,
+            # which corrupted the start rather than recovering onset.)
+            padded = audio
 
             clip = padded
             event["audio_secs"] = padded.size / sample_rate
