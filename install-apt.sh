@@ -12,8 +12,12 @@ info()  { echo -e "${GREEN}[+]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $*"; }
 error() { echo -e "${RED}[x]${NC} $*"; exit 1; }
 
-PAGES_BASE="${YAZSES_APT_BASE_URL:-https://novafabric.github.io/yazses/apt}"
+# The apt repo lives on the gh-pages branch. GitHub Pages on this repo serves the
+# docs site from main, so it does NOT serve gh-pages — the raw.githubusercontent
+# URL is the canonical apt channel; the Pages URL is only tried as a fallback in
+# case Pages is ever reconfigured. YAZSES_APT_BASE_URL overrides both.
 RAW_BASE="https://raw.githubusercontent.com/novafabric/yazses/gh-pages/apt"
+PAGES_BASE="https://novafabric.github.io/yazses/apt"
 KEYRING="/usr/share/keyrings/yazses.gpg"
 SOURCE_LIST="/etc/apt/sources.list.d/yazses.list"
 TMP_KEY="$(mktemp)"
@@ -32,13 +36,17 @@ else
   sudo apt-get install -y -qq ca-certificates gnupg >/dev/null
 fi
 
-BASE_URL="$PAGES_BASE"
-info "Checking APT repository at $BASE_URL ..."
-if ! curl -fsSL "$BASE_URL/KEY.gpg" -o "$TMP_KEY"; then
-  warn "GitHub Pages APT URL is not reachable yet; falling back to raw GitHub content."
-  BASE_URL="$RAW_BASE"
-  curl -fsSL "$BASE_URL/KEY.gpg" -o "$TMP_KEY" || error "Could not download YazSes APT signing key from GitHub Pages or raw GitHub."
-fi
+info "Locating YazSes APT repository..."
+BASE_URL=""
+for cand in "${YAZSES_APT_BASE_URL:-}" "$RAW_BASE" "$PAGES_BASE"; do
+  [ -n "$cand" ] || continue
+  if curl -fsSL "$cand/KEY.gpg" -o "$TMP_KEY" 2>/dev/null; then
+    BASE_URL="$cand"
+    break
+  fi
+done
+[ -n "$BASE_URL" ] || error "Could not download the YazSes APT signing key from any known URL."
+info "Using APT repository: $BASE_URL"
 
 info "Installing APT signing key..."
 sudo install -d -m 0755 /usr/share/keyrings
