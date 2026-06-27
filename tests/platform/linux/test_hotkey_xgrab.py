@@ -22,9 +22,9 @@ def test_unknown_key_raises():
         _make_hotkey(key_id="f13_super_extra")
 
 
-def test_auto_resolves_to_space():
+def test_auto_resolves_to_default():
     hk = _make_hotkey(key_id="auto")
-    assert hk.key_id == "space"
+    assert hk.key_id == "right_alt"
 
 
 def test_known_keys_accepted():

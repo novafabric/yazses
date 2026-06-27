@@ -45,7 +45,7 @@ def build_platform() -> Platform:
     paths = build_paths()
     return Platform(
         name="linux",
-        default_hotkey="space",
+        default_hotkey="right_alt",
         paths=paths,
         permissions=LinuxPermissions(),
         lifecycle=LinuxLifecycle(paths=paths),

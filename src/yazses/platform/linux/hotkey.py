@@ -31,7 +31,7 @@ _KEY_MAP: dict[str, int] = {
 _CHARACTER_KEYS: frozenset[str] = frozenset({"space"})
 
 
-def resolve_key_id(key_id: str, default: str = "space") -> tuple[str, int]:
+def resolve_key_id(key_id: str, default: str = "right_alt") -> tuple[str, int]:
     """Return (canonical_key_id, evdev_key_code). 'auto' resolves to default."""
     name = key_id.lower()
     if name == "auto":

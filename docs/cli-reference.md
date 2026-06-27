@@ -64,6 +64,24 @@ not advised and exits; add `--force` to override.
 Stored at `~/.config/yazses/vocabulary.txt`; the daemon merges these into Whisper's
 `initial_prompt` on every dictation.
 
+### Moving your dictionary to another device
+
+Your dictionary and settings are plain files under `~/.config/yazses/`, so they
+move with a simple copy — no export step:
+
+```bash
+# on the new device, after installing YazSes:
+mkdir -p ~/.config/yazses
+scp olddevice:~/.config/yazses/vocabulary.txt ~/.config/yazses/   # the dictionary
+scp olddevice:~/.config/yazses/config.toml    ~/.config/yazses/   # hotkey, VAD, etc.
+yazses restart
+```
+
+Keep `vocabulary.txt` in your dotfiles/backup and it follows you everywhere. The
+opt-in learning corpus (`~/.local/share/yazses/`) is **not** part of this — it is
+encrypted on-device data and is intentionally not portable (see the
+[privacy statement](privacy-statement.md)).
+
 ## Hold-to-talk key
 
 | Command | Description |
@@ -116,7 +134,7 @@ After a successful update, restart the daemon to load it:
 |---|---|
 | `yazses setup` | **Linux provisioning, one command.** Installs the audio + injection system packages (`libportaudio2`, `xdotool`, `ydotool`, `wtype`, `xclip`, `wl-clipboard`), adds you to the `input` group, and on Wayland sets up + enables the `ydotoold` user service (required for injection on GNOME/KDE Wayland, where `wtype` is blocked). Idempotent — only fixes what's missing. Re-login after a group change. |
 | `yazses setup --dry-run` | Show what `setup` would install/change without doing it. |
-| `yazses doctor` | Health check: installed version, daemon status (PID/state/model), keyboard capture, microphone, session type, injection tools, **injection readiness + `ydotoold` status**, STT model availability, model cache, config dir, active config + hotkey summary, (EMG port / enabled extras if configured). |
+| `yazses doctor` | Health check: installed version, daemon status (PID/state/model), **install consistency** (duplicate `yazses` on `PATH`; systemd `ExecStart` pointing at a missing/different binary), keyboard capture, **which input device the hotkey binds to** (flags a virtual injector device that would make the hotkey dead), microphone, session type, injection tools, **injection readiness + `ydotoold` status**, STT model availability, model cache, config dir, active config + hotkey summary, (EMG port / enabled extras if configured). |
 | `yazses doctor --mic` | As above, plus record a short ambient clip and warn if room level meets/exceeds `accessibility.vad_threshold`. |
 | `yazses mic-level` | Record ~4s, report your average mic level vs the current `vad_threshold`, and recommend a threshold. |
 | `yazses mic-level --set` | Same, and write the recommended `vad_threshold` to `config.toml` in place (comments preserved). |

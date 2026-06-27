@@ -80,7 +80,12 @@ def _resolved_hotkey(platform) -> str:
         # exist. (Passing None would fall back to the *default* user config path,
         # which may differ from this platform's config_file.)
         cfg = load_config(platform.paths.config_file)
-        return cfg.hotkey.key or platform.default_hotkey
+        key = cfg.hotkey.key
+        # "auto" (and the empty string) mean "use the platform default" — resolve
+        # it so messages show the real key (e.g. right_alt), never the sentinel.
+        if not key or key == "auto":
+            return platform.default_hotkey
+        return key
     except Exception:
         return platform.default_hotkey
 

@@ -27,7 +27,7 @@ def test_factory_returns_linux_platform():
     p = get_platform()
     assert isinstance(p, Platform)
     assert p.name == "linux"
-    assert p.default_hotkey == "space"
+    assert p.default_hotkey == "right_alt"
     assert p.tray_factory is None
     assert p.tray_default_enabled is False
 

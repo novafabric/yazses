@@ -186,7 +186,43 @@ journalctl --user -u yazses.service -f     # live logs via journald
 Config lives at `~/.config/yazses/config.toml`. See the
 [CLI reference](cli-reference.md) for all commands.
 
-## 7. Voice-activity overlay
+## 7. Troubleshooting: the hotkey does nothing
+
+If holding the key records nothing (no transcript, no overlay reaction), run the
+health check first — it now pinpoints every common cause in one shot:
+
+```bash
+yazses doctor
+```
+
+Look for these lines and act on any that are not `[OK]`:
+
+- **`Hotkey device: bound to virtual device …`** — the daemon is listening on an
+  injector's virtual device (e.g. `ydotoold virtual device`) instead of your real
+  keyboard, so your keypresses are never seen. Make sure you are in the `input`
+  group (`groups | grep input`; if missing, [§1a](#1a-add-yourself-to-the-input-group-required),
+  then log out and back in) so the real keyboard is readable. Fixed in v1.3.3+,
+  which skips virtual devices automatically; older builds need an upgrade.
+- **`systemd unit: ExecStart=… does not exist`** — the service points at a binary
+  that isn't there (a leftover from a different install method), so it crash-loops
+  with `status 203/EXEC` and `yazses start`/`restart` silently start nothing. Point
+  the unit's `ExecStart` at your real binary (`which yazses-daemon`) and
+  `systemctl --user daemon-reload && systemctl --user restart yazses`.
+- **`Install: multiple yazses on PATH …`** — you have more than one copy installed
+  (e.g. apt + pipx + uv tool). Keep one and uninstall the rest so an upgrade can't
+  leave you running stale code: `pipx uninstall yazses`, `sudo apt remove yazses`,
+  or `uv tool uninstall yazses` as appropriate.
+- **`Keyboard capture: FAIL`** — you are not in the `input` group; see
+  [§1a](#1a-add-yourself-to-the-input-group-required).
+
+If `yazses logs` shows `Silent audio -- discarding`, the key *is* working but your
+speech is below the VAD gate — see [§5](#5-tune-the-silence-threshold).
+
+> **Tip:** manage the daemon with `systemctl --user restart yazses` when a systemd
+> unit exists; mixing `yazses start` (detached) with a systemd unit can leave two
+> daemons fighting over the hotkey, or none running at all.
+
+## 8. Voice-activity overlay
 
 The overlay draws neon "sonar" rings near the cursor that pulse with your voice
 while you dictate. It is **on by default** and works out of the box: PySide6 is

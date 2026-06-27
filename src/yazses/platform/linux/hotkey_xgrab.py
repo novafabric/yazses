@@ -41,7 +41,7 @@ class X11GrabHotkey:
     ) -> None:
         name = key_id.lower()
         if name == "auto":
-            name = "space"
+            name = "right_alt"
         if name not in _KEY_SYM_MAP:
             raise ValueError(
                 f"Unknown hotkey {key_id!r}. Supported: {sorted(_KEY_SYM_MAP)} or 'auto'."

@@ -19,7 +19,10 @@ class SttConfig:
 
 @dataclass
 class HotkeyConfig:
-    key: str = "space"
+    # "auto" resolves to the platform's default hold-to-talk key (Linux:
+    # right_alt, macOS: right_option, Windows: right_ctrl) — a modifier key, so
+    # it never collides with normal typing the way the space bar would.
+    key: str = "auto"
     hold_threshold_ms: int = 500
     source: str = "default"
     evdev_device: str = ""
