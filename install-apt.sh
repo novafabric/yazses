@@ -84,12 +84,40 @@ else
   NEEDS_RELOGIN=0
 fi
 
+# On Wayland, keystroke injection needs ydotoold running (the only option on
+# GNOME/KDE Wayland, where wtype is blocked). Set up + enable its user service so
+# injection works out of the box. Needs the input group for /dev/uinput access,
+# so it may only start after the next login.
+if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v ydotoold >/dev/null 2>&1; then
+  info "Setting up ydotoold (Wayland keystroke injection)..."
+  install -d "$HOME/.config/systemd/user"
+  cat > "$HOME/.config/systemd/user/ydotoold.service" <<'YDOTOOLD'
+[Unit]
+Description=ydotoold — virtual input daemon (required for Wayland keystroke injection)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket --socket-own=%U:%G
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+YDOTOOLD
+fi
+
 if command -v systemctl >/dev/null 2>&1; then
   info "Enabling YazSes user service..."
   systemctl --user daemon-reload || true
   systemctl --user enable yazses.service || true
+  if [ -f "$HOME/.config/systemd/user/ydotoold.service" ]; then
+    systemctl --user enable ydotoold.service || true
+  fi
   if [ "${NEEDS_RELOGIN:-0}" = "0" ]; then
     systemctl --user start yazses.service || true
+    [ -f "$HOME/.config/systemd/user/ydotoold.service" ] && systemctl --user start ydotoold.service || true
   fi
 fi
 

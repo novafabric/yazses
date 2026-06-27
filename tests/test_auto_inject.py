@@ -18,10 +18,21 @@ def test_x11_with_xdotool(monkeypatch):
         assert isinstance(get_injector(), XdotoolInjector)
 
 
-def test_wayland_prefers_ydotool(monkeypatch):
+def test_wayland_prefers_ydotool_when_daemon_running(monkeypatch):
+    # ydotool is only chosen when ydotoold's socket exists (it's useless without).
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wtype"])):
+    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wtype"])), \
+         patch("yazses.inject.auto.os.path.exists", return_value=True):
         assert isinstance(get_injector(), YdotoolInjector)
+
+
+def test_wayland_without_ydotoold_falls_back_to_wtype(monkeypatch):
+    # ydotool installed but no daemon socket → must NOT pick ydotool (it would
+    # fail at runtime); fall back to wtype. This is the GNOME-Wayland fix.
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wtype"])), \
+         patch("yazses.inject.auto.os.path.exists", return_value=False):
+        assert isinstance(get_injector(), WtypeInjector)
 
 
 def test_wayland_falls_back_to_wtype(monkeypatch):

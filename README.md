@@ -47,23 +47,25 @@ This repo holds **one product** with **two implementations** — not two separat
 | **Linux** (any distro) | `sudo snap install yazses` |
 | **Any OS** (Python ≥ 3.11) | `pipx install yazses` |
 
-**Step 2 — Linux prerequisites** *(required for the `pipx`/`snap` installs — the APT script does all of this for you)*
+**Step 2 — Provision the system** *(Linux — one command; the APT install does it automatically)*
 
 ```sh
-# All runtime tools in one go (apt picks what your session needs at runtime):
-sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
-sudo usermod -aG input "$USER"   # input group — the hotkey is read from the kernel input devices
-# then log out and back in (or reboot) for the group change to take effect
+yazses setup        # installs audio + injection deps, joins the input group, sets up ydotoold
+# then log out and back in (the input-group change needs a fresh login)
 ```
 
-What each provides: `libportaudio2` = audio capture (**required** — without it the daemon crashes on start with `OSError: PortAudio library not found`); `xdotool`+`xclip` = X11 text injection + clipboard; `wtype`/`ydotool`+`wl-clipboard` = the Wayland equivalents; `pipx` = the installer. The hotkey won't fire without the `input` group. Do all of this **before** `yazses start`.
+`yazses setup` fixes everything dictation needs and is safe to re-run — it only does what's missing:
+- **`libportaudio2`** — audio capture (without it the daemon crashes on start with `OSError: PortAudio library not found`).
+- **injection backends** — `xdotool`/`xclip` (X11) and `wtype`/`ydotool`/`wl-clipboard` (Wayland).
+- **`input` group** — required to read the hold-to-talk hotkey from the kernel.
+- **`ydotoold`** — the virtual-input daemon. On **GNOME/KDE Wayland** this is the *only* way to inject keystrokes (`wtype` is blocked there), so `setup` installs and enables it.
 
-> Verify with `yazses doctor` — you want `[OK] Keyboard capture` and `[OK] Microphone`. macOS/Windows skip this step (grant Accessibility/permissions when prompted instead — see below).
+> Prefer to do it by hand? `sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx && sudo usermod -aG input "$USER"`, then enable `ydotoold` (see [install-linux](docs/install-linux.md)). Verify anytime with `yazses doctor` — you want `[OK] Keyboard capture`, `[OK] Microphone`, and `[OK] Injection`. macOS/Windows skip this step (grant Accessibility/permissions when prompted — see below).
 
 **Step 3 — Set up**
 
 ```sh
-yazses doctor               # check mic, injection backend, permissions
+yazses doctor               # check mic, injection backend, permissions (want all [OK])
 yazses enroll               # calibrate your microphone (~30 seconds)
 yazses start                # start the dictation daemon
 ```

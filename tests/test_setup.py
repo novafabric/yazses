@@ -1,0 +1,90 @@
+"""Tests for the pure provisioning planner in yazses.system.setup."""
+
+from yazses.system import setup
+
+
+def _which(available):
+    return lambda cmd: f"/usr/bin/{cmd}" if cmd in available else None
+
+
+ALL_TOOLS = ["xdotool", "ydotool", "wtype", "xclip", "wl-copy"]
+
+
+def test_detect_session():
+    assert setup.detect_session({"WAYLAND_DISPLAY": "wayland-0"}) == "wayland"
+    assert setup.detect_session({"DISPLAY": ":0"}) == "x11"
+    assert setup.detect_session({}) == "headless"
+
+
+def test_fully_provisioned_machine_is_noop_on_x11():
+    plan = setup.build_plan(
+        {"DISPLAY": ":0"},
+        which=_which(ALL_TOOLS),
+        portaudio_present=lambda: True,
+        user="u",
+        user_in_input_group=lambda u: True,
+    )
+    assert plan.session == "x11"
+    assert plan.apt_packages == []
+    assert plan.add_to_input_group is False
+    assert plan.setup_ydotoold is False
+    assert plan.is_noop
+
+
+def test_bare_machine_needs_everything():
+    plan = setup.build_plan(
+        {"WAYLAND_DISPLAY": "wayland-0"},
+        which=_which([]),  # no tools installed
+        portaudio_present=lambda: False,
+        user="u",
+        user_in_input_group=lambda u: False,
+    )
+    assert "libportaudio2" in plan.apt_packages
+    assert "ydotool" in plan.apt_packages and "wtype" in plan.apt_packages
+    assert "wl-clipboard" in plan.apt_packages  # mapped from missing wl-copy
+    assert plan.add_to_input_group is True
+    assert plan.setup_ydotoold is True  # Wayland
+    assert not plan.is_noop
+
+
+def test_portaudio_detected_via_loader_not_binary():
+    # libportaudio2 has no binary; presence is decided by portaudio_present()
+    plan = setup.build_plan(
+        {"DISPLAY": ":0"},
+        which=_which(ALL_TOOLS),
+        portaudio_present=lambda: False,
+        user="u",
+        user_in_input_group=lambda u: True,
+    )
+    assert plan.apt_packages == ["libportaudio2"]
+
+
+def test_wl_clipboard_package_maps_from_wl_copy_binary():
+    plan = setup.build_plan(
+        {"WAYLAND_DISPLAY": "wayland-0"},
+        which=_which(["xdotool", "ydotool", "wtype", "xclip"]),  # wl-copy missing
+        portaudio_present=lambda: True,
+        user="u",
+        user_in_input_group=lambda u: True,
+    )
+    assert plan.apt_packages == ["wl-clipboard"]
+
+
+def test_x11_session_skips_ydotoold():
+    plan = setup.build_plan(
+        {"DISPLAY": ":0"},
+        which=_which([]),
+        portaudio_present=lambda: True,
+        user="u",
+        user_in_input_group=lambda u: True,
+    )
+    assert plan.setup_ydotoold is False
+
+
+def test_apply_noop_plan_does_nothing():
+    calls = []
+    plan = setup.SetupPlan(session="x11")
+    assert plan.is_noop
+    ok = setup.apply_plan(plan, runner=lambda *a, **k: calls.append(a), echo=lambda *_: None)
+    assert ok is True
+    assert calls == []

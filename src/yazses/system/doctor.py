@@ -30,6 +30,51 @@ def _tool(label: str, *, required: bool) -> _Check:
     return (f"  {label}", "SKIP", "not needed on this session type")
 
 
+# Wayland compositors where `wtype` is blocked (no virtual-keyboard protocol),
+# so keystroke injection requires ydotool + a running ydotoold.
+_UINPUT_ONLY_DESKTOPS = ("gnome", "kde", "plasma", "cinnamon", "unity", "mate", "xfce", "lxqt")
+
+
+def _injection_readiness(is_wayland: bool, is_x11: bool) -> list[_Check]:
+    """Report whether keystroke injection will actually work, with the fix."""
+    from yazses.inject.auto import ydotool_ready, ydotool_socket_path
+
+    out: list[_Check] = []
+    if is_wayland:
+        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+        gnome_like = any(d in desktop for d in _UINPUT_ONLY_DESKTOPS)
+        sock = ydotool_socket_path()
+        if ydotool_ready():
+            out.append(("ydotoold", "OK", f"running ({sock})"))
+            out.append(("Injection", "OK", "ydotool — works on any Wayland compositor"))
+        elif shutil.which("ydotool"):
+            out.append(("ydotoold", "FAIL" if gnome_like else "WARN",
+                        f"not running (no socket at {sock}) — run `yazses setup`"))
+            if gnome_like:
+                out.append(("Injection", "FAIL",
+                            "GNOME/KDE Wayland needs ydotool+ydotoold (wtype is blocked) — run `yazses setup`"))
+            elif shutil.which("wtype"):
+                out.append(("Injection", "OK", "wtype — ydotoold off but fine on wlroots compositors"))
+            else:
+                out.append(("Injection", "FAIL", "no working backend — run `yazses setup`"))
+        elif shutil.which("wtype"):
+            if gnome_like:
+                out.append(("Injection", "FAIL",
+                            "wtype does not work on GNOME/KDE Wayland — run `yazses setup` (installs ydotool+ydotoold)"))
+            else:
+                out.append(("Injection", "OK", "wtype (wlroots)"))
+        else:
+            out.append(("Injection", "FAIL", "no Wayland injector installed — run `yazses setup`"))
+    elif is_x11:
+        if shutil.which("xdotool"):
+            out.append(("Injection", "OK", "xdotool (X11)"))
+        elif shutil.which("xclip"):
+            out.append(("Injection", "WARN", "clipboard paste only (install xdotool for direct typing)"))
+        else:
+            out.append(("Injection", "FAIL", "no X11 injector — run `yazses setup`"))
+    return out
+
+
 def _prosody_check(enabled: bool) -> _Check | None:
     """Report whether the optional ``prosody`` extra (parselmouth) is importable.
 
@@ -237,12 +282,15 @@ def run_doctor(check_mic: bool = False, mic_seconds: float = 2.0) -> None:
         session_ok = is_wayland or is_x11
         checks.append(("Session type", "OK" if session_ok else "WARN", session))
 
-        # X11 tools: required on X11, skip on Wayland
-        checks.append(_tool("xdotool", required=is_x11 or not is_wayland))
-        checks.append(_tool("ydotool", required=is_wayland))
-        checks.append(_tool("wtype",   required=is_wayland))
-        checks.append(_tool("xclip",   required=is_x11 or not is_wayland))
-        checks.append(_tool("wl-copy", required=is_wayland))
+        # Injection backends are informational (only one is needed per session);
+        # the actual pass/fail signal is the "Injection" readiness check below.
+        checks.append(_tool("xdotool", required=False))
+        checks.append(_tool("ydotool", required=False))
+        checks.append(_tool("wtype",   required=False))
+        checks.append(_tool("xclip",   required=False))
+        checks.append(_tool("wl-copy", required=False))
+
+        checks.extend(_injection_readiness(is_wayland, is_x11))
 
     # Model cache (Hugging Face)
     hf_cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"

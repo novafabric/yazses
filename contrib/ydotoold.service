@@ -1,0 +1,18 @@
+[Unit]
+Description=ydotoold — virtual input daemon (required for Wayland keystroke injection)
+Documentation=man:ydotoold(8)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Socket at the path ydotool's client looks for by default, owned by the calling
+# user so yazses (same user) can connect. /dev/uinput access comes from the
+# user's membership in the `input` group. On GNOME/KDE Wayland this is the only
+# way to inject keystrokes (Mutter/KWin block wtype's virtual-keyboard protocol).
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket --socket-own=%U:%G
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

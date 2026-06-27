@@ -6,13 +6,24 @@ configuration. Tested on X11 + PipeWire.
 
 ## 1. Prerequisites
 
+**The easy way — one command does all of this:**
+
 ```bash
-yazses doctor   # after install, but the checks apply: xdotool, mic, input group
+yazses setup    # installs deps, joins the input group, sets up ydotoold (Wayland)
+# then log out and back in (the input-group change needs a fresh login)
 ```
 
-**For the `pipx`/`uv tool` installs below, install every runtime dependency in one
-command** (the APT `.deb` pulls these in automatically, so skip this if you used
-`install-apt.sh`):
+`yazses setup` is idempotent (safe to re-run) and provisions everything below
+automatically. The rest of this section explains what it does, for when you want
+to do it by hand or understand the pieces. Verify anytime with `yazses doctor`
+(want `[OK] Keyboard capture`, `[OK] Microphone`, `[OK] Injection`).
+
+```bash
+yazses doctor   # after install: checks injection backend, mic, input group, ydotoold
+```
+
+**Manual route — install every runtime dependency in one command** (the APT
+`.deb` pulls these in automatically, so skip this if you used `install-apt.sh`):
 
 ```bash
 sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
@@ -54,6 +65,34 @@ yazses doctor                          # should show [OK] Keyboard capture
 ```
 
 Do this **before** starting the daemon (step 3).
+
+### 1b. Wayland keystroke injection — `ydotoold` (GNOME/KDE Wayland)
+
+How text gets typed depends on your session:
+
+| Session | Injector | Notes |
+|---|---|---|
+| X11 | `xdotool` | works out of the box |
+| Wayland — wlroots (Sway, Hyprland, …) | `wtype` | works out of the box |
+| **Wayland — GNOME / KDE** | **`ydotool` + `ydotoold`** | `wtype` is **blocked** by Mutter/KWin; `ydotool` injects at the kernel `/dev/uinput` level and is the only reliable option |
+
+On GNOME/KDE Wayland you must run the `ydotoold` daemon, or injection fails with
+`failed to connect socket … .ydotool_socket`. `yazses setup` configures this for
+you; to do it manually, install the user service:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp /usr/lib/systemd/user/ydotoold.service ~/.config/systemd/user/ 2>/dev/null \
+  || curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/contrib/ydotoold.service \
+       -o ~/.config/systemd/user/ydotoold.service
+systemctl --user daemon-reload
+systemctl --user enable --now ydotoold.service
+ls -l /run/user/$(id -u)/.ydotool_socket   # socket should now exist
+```
+
+`ydotoold` runs as your user (no root) because `/dev/uinput` is owned by the
+`input` group (step 1a). After this, `yazses doctor` shows `[OK] Injection` and
+`[OK] ydotoold`.
 
 ## 2. Install the CLI globally
 

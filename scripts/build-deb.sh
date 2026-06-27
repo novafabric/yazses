@@ -21,6 +21,10 @@ mkdir -p "$STAGING/usr/lib/systemd/user"
 sed 's|%h/.local/bin/yazses-daemon|/usr/bin/yazses-daemon|g' \
     contrib/yazses.service > "$STAGING/usr/lib/systemd/user/yazses.service"
 
+# ydotoold user service — required for Wayland keystroke injection (the only
+# option on GNOME/KDE Wayland). postinst enables it for the installing user.
+cp contrib/ydotoold.service "$STAGING/usr/lib/systemd/user/ydotoold.service"
+
 # XDG autostart — imports DISPLAY/XAUTHORITY into the systemd user manager at
 # every graphical login so PassEnvironment works on all desktop environments.
 mkdir -p "$STAGING/etc/xdg/autostart"
@@ -68,18 +72,23 @@ if [ "$1" = "configure" ]; then
         ln -sf "$(pip3 show yazses | awk '/^Location/{print $2}')/../../bin/yazses-daemon" /usr/bin/yazses-daemon 2>/dev/null || true
     fi
 
+    # Enable ydotoold for the installing user on Wayland (only reliable injector
+    # on GNOME/KDE Wayland). May only start after the next login (input group).
+    CALLER="${SUDO_USER:-$USER}"
+    if [ "$CALLER" != "root" ]; then
+        su - "$CALLER" -c 'systemctl --user daemon-reload 2>/dev/null || true'
+        su - "$CALLER" -c 'systemctl --user enable ydotoold.service 2>/dev/null || true'
+    fi
+
     echo ""
     echo "YazSes installed."
     echo ""
-    echo "Complete setup (run once per user):"
-    echo "  sudo usermod -aG input \$USER   # allow keyboard access"
-    echo "  Log out and back in"
+    echo "Finish setup in one command (installs deps, joins input group, sets up ydotoold):"
+    echo "  yazses setup"
+    echo "  # then log out and back in"
     echo ""
     echo "Auto-start on login:"
     echo "  systemctl --user enable --now yazses.service"
-    echo ""
-    echo "Or use the interactive installer:"
-    echo "  bash /usr/share/yazses/install.sh"
 fi
 EOF
 chmod 755 "$STAGING/DEBIAN/postinst"

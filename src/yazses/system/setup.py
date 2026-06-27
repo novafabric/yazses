@@ -1,0 +1,212 @@
+"""`yazses setup` — provision all Linux runtime requirements in one command.
+
+A Python wheel cannot install system libraries, desktop tools, or kernel/group
+permissions, so a `pipx`/`uv`/`snap` install is missing the very things that make
+dictation work. This module detects the session and computes (then applies) the
+exact set of fixes for the three failure classes:
+
+1. `libportaudio2` missing → daemon crashes on start
+   (`OSError: PortAudio library not found`).
+2. user not in the `input` group → the hold-to-talk hotkey can't be read from
+   `/dev/input/event*` (and `ydotoold` can't open `/dev/uinput`).
+3. on GNOME/KDE Wayland, keystroke injection needs `ydotool` + a running
+   `ydotoold` (Mutter blocks `wtype`'s virtual-keyboard protocol).
+
+The planning half (`build_plan`) is pure and unit-tested; `apply_plan` runs it.
+"""
+
+from __future__ import annotations
+
+import ctypes.util
+import grp
+import os
+import pwd
+import shutil
+import subprocess
+from dataclasses import dataclass, field
+
+# The robust superset of Debian/Ubuntu runtime packages. We install all of them
+# so dictation works whether the user logs into X11 or Wayland later; at runtime
+# YazSes auto-selects the right backend (inject/auto.py).
+APT_PACKAGES = [
+    "libportaudio2",  # audio capture (sounddevice) — always required
+    "xdotool",        # X11 text injection
+    "xclip",          # X11 clipboard fallback
+    "wtype",          # Wayland (wlroots) text injection
+    "ydotool",        # Wayland (any compositor) injection via /dev/uinput
+    "wl-clipboard",   # Wayland clipboard fallback (wl-copy)
+]
+
+# Shipped at contrib/ydotoold.service too — kept in sync.
+YDOTOOLD_SERVICE = """\
+[Unit]
+Description=ydotoold — virtual input daemon (required for Wayland keystroke injection)
+Documentation=man:ydotoold(8)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# Socket at the path ydotool's client looks for by default, owned by the calling
+# user so yazses (same user) can connect. /dev/uinput access comes from the
+# user's membership in the `input` group.
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket --socket-own=%U:%G
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+"""
+
+
+@dataclass
+class SetupPlan:
+    """What `yazses setup` will do, computed from the environment."""
+
+    apt_packages: list[str] = field(default_factory=list)
+    add_to_input_group: bool = False
+    setup_ydotoold: bool = False
+    session: str = "unknown"  # "x11" | "wayland" | "headless"
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def is_noop(self) -> bool:
+        return not (self.apt_packages or self.add_to_input_group or self.setup_ydotoold)
+
+
+def _portaudio_present() -> bool:
+    return ctypes.util.find_library("portaudio") is not None
+
+
+def _user_in_input_group(user: str) -> bool:
+    """True if *user* is in the `input` group at the system level (/etc/group).
+
+    Uses the group database rather than the live session so it reflects whether
+    `usermod` has been run (a fresh login may still be pending).
+    """
+    try:
+        if user in grp.getgrnam("input").gr_mem:
+            return True
+        # primary group is unlikely to be `input`, but check for completeness
+        return grp.getgrgid(pwd.getpwnam(user).pw_gid).gr_name == "input"
+    except KeyError:
+        return False
+
+
+def detect_session(env: dict[str, str] | None = None) -> str:
+    env = os.environ if env is None else env
+    if env.get("WAYLAND_DISPLAY"):
+        return "wayland"
+    if env.get("DISPLAY"):
+        return "x11"
+    return "headless"
+
+
+def build_plan(
+    env: dict[str, str] | None = None,
+    *,
+    which=shutil.which,
+    portaudio_present=_portaudio_present,
+    user: str | None = None,
+    user_in_input_group=_user_in_input_group,
+) -> SetupPlan:
+    """Compute the provisioning plan for the current machine (pure / testable)."""
+    env = os.environ if env is None else env
+    user = user or _current_user()
+    plan = SetupPlan(session=detect_session(env))
+
+    # 1. Missing apt packages. libportaudio2 has no binary, probe the lib loader;
+    #    the rest map 1:1 to a CLI binary of the same name.
+    for pkg in APT_PACKAGES:
+        if pkg == "libportaudio2":
+            if not portaudio_present():
+                plan.apt_packages.append(pkg)
+        elif pkg == "wl-clipboard":
+            if which("wl-copy") is None:
+                plan.apt_packages.append(pkg)
+        elif which(pkg) is None:
+            plan.apt_packages.append(pkg)
+
+    # 2. input group membership (hotkey capture + /dev/uinput for ydotoold).
+    if not user_in_input_group(user):
+        plan.add_to_input_group = True
+        plan.notes.append(
+            "You must log out and back in after joining the `input` group "
+            "for it to take effect."
+        )
+
+    # 3. ydotoold on Wayland — works on every compositor via /dev/uinput, and is
+    #    the ONLY option on GNOME/KDE Wayland (wtype is blocked there).
+    if plan.session == "wayland":
+        plan.setup_ydotoold = True
+
+    return plan
+
+
+def _current_user() -> str:
+    return os.environ.get("SUDO_USER") or os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
+
+
+def _has_apt() -> bool:
+    return shutil.which("apt-get") is not None
+
+
+def ydotoold_service_path() -> str:
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "systemd", "user", "ydotoold.service")
+
+
+def write_ydotoold_service() -> str:
+    path = ydotoold_service_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(YDOTOOLD_SERVICE)
+    return path
+
+
+def apply_plan(plan: SetupPlan, *, runner=subprocess.run, echo=print) -> bool:
+    """Execute *plan*. Returns True on success. Best-effort, idempotent."""
+    if plan.is_noop:
+        echo("All Linux requirements already satisfied — nothing to do.")
+        return True
+
+    ok = True
+
+    if plan.apt_packages:
+        if _has_apt():
+            echo(f"Installing system packages: {' '.join(plan.apt_packages)}")
+            runner(["sudo", "apt-get", "update", "-qq"], check=False)
+            r = runner(["sudo", "apt-get", "install", "-y", *plan.apt_packages], check=False)
+            if getattr(r, "returncode", 0) != 0:
+                ok = False
+                echo("  warning: some packages failed to install — see output above.")
+        else:
+            ok = False
+            echo(
+                "No apt-get found. Install these with your package manager:\n  "
+                + " ".join(plan.apt_packages)
+            )
+
+    if plan.add_to_input_group:
+        user = _current_user()
+        echo(f"Adding {user} to the `input` group (keyboard + uinput access)...")
+        r = runner(["sudo", "usermod", "-aG", "input", user], check=False)
+        if getattr(r, "returncode", 0) != 0:
+            ok = False
+            echo("  warning: usermod failed.")
+
+    if plan.setup_ydotoold:
+        path = write_ydotoold_service()
+        echo(f"Configured ydotoold user service: {path}")
+        runner(["systemctl", "--user", "daemon-reload"], check=False)
+        r = runner(["systemctl", "--user", "enable", "--now", "ydotoold.service"], check=False)
+        if getattr(r, "returncode", 0) != 0:
+            echo(
+                "  note: could not start ydotoold now (likely needs a fresh login "
+                "for `input`-group access to /dev/uinput). It will start on next login."
+            )
+
+    for note in plan.notes:
+        echo(f"! {note}")
+
+    return ok

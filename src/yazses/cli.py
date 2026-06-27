@@ -749,6 +749,62 @@ def remote(
         raise typer.Exit(1)
 
 
+@app.command(
+    rich_help_panel=_SETUP,
+    epilog=_examples("yazses setup    install audio + injection deps, join input group, set up ydotoold"),
+)
+def setup(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be installed/changed without doing it."
+    ),
+) -> None:
+    """Provision all Linux runtime requirements so dictation works out of the box.
+
+    Installs the audio + injection system packages (libportaudio2, xdotool,
+    ydotool, wtype, xclip, wl-clipboard), adds you to the `input` group (needed
+    for the hotkey and for ydotool's /dev/uinput access), and on Wayland sets up
+    the `ydotoold` user service (required for injection on GNOME/KDE Wayland,
+    where wtype is blocked). Safe to re-run — it only fixes what's missing.
+    """
+    import sys as _sys
+
+    if _sys.platform != "linux":
+        typer.echo("yazses setup currently provisions Linux only; nothing to do.")
+        return
+
+    from yazses.system import setup as _setup
+
+    plan = _setup.build_plan()
+    typer.echo(f"Session: {plan.session}")
+    if plan.is_noop:
+        typer.echo("All Linux requirements already satisfied — nothing to do.")
+        raise typer.Exit(0)
+
+    typer.echo("Plan:")
+    if plan.apt_packages:
+        typer.echo(f"  • install packages: {' '.join(plan.apt_packages)}")
+    if plan.add_to_input_group:
+        typer.echo("  • add you to the `input` group (sudo)")
+    if plan.setup_ydotoold:
+        typer.echo("  • set up + enable the ydotoold user service (Wayland injection)")
+
+    if dry_run:
+        typer.echo("\n(dry run — no changes made)")
+        return
+
+    typer.echo("")
+    ok = _setup.apply_plan(plan)
+    typer.echo("")
+    typer.echo("Verifying with `yazses doctor`...\n")
+    from yazses.system.doctor import run_doctor
+
+    run_doctor()
+    if not ok:
+        typer.echo("\nSome steps need attention — see warnings above.", err=True)
+        raise typer.Exit(1)
+    typer.echo("\nSetup complete. If you were just added to the `input` group, log out and back in.")
+
+
 @app.command(rich_help_panel=_SETUP)
 def enroll() -> None:
     """Run the accessibility enrollment wizard to calibrate VAD thresholds.

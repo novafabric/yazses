@@ -114,7 +114,9 @@ After a successful update, restart the daemon to load it:
 
 | Command | Description |
 |---|---|
-| `yazses doctor` | Health check: installed version, daemon status (PID/state/model), keyboard capture, microphone, session type, injection tools, STT model availability, model cache, config dir, active config + hotkey summary, (EMG port / enabled extras if configured). |
+| `yazses setup` | **Linux provisioning, one command.** Installs the audio + injection system packages (`libportaudio2`, `xdotool`, `ydotool`, `wtype`, `xclip`, `wl-clipboard`), adds you to the `input` group, and on Wayland sets up + enables the `ydotoold` user service (required for injection on GNOME/KDE Wayland, where `wtype` is blocked). Idempotent — only fixes what's missing. Re-login after a group change. |
+| `yazses setup --dry-run` | Show what `setup` would install/change without doing it. |
+| `yazses doctor` | Health check: installed version, daemon status (PID/state/model), keyboard capture, microphone, session type, injection tools, **injection readiness + `ydotoold` status**, STT model availability, model cache, config dir, active config + hotkey summary, (EMG port / enabled extras if configured). |
 | `yazses doctor --mic` | As above, plus record a short ambient clip and warn if room level meets/exceeds `accessibility.vad_threshold`. |
 | `yazses mic-level` | Record ~4s, report your average mic level vs the current `vad_threshold`, and recommend a threshold. |
 | `yazses mic-level --set` | Same, and write the recommended `vad_threshold` to `config.toml` in place (comments preserved). |

@@ -27,13 +27,14 @@ bash <(curl -fsSL https://raw.githubusercontent.com/MSKazemi/yazses/main/install
 sudo snap install yazses
 ```
 
-**Linux only — runtime deps + keyboard access (the `install-apt.sh` / APT path does all of this for you).** For the `pipx` install, install the system tools and add yourself to the `input` group:
+**Linux only — provision the system in one command** (the `install-apt.sh` / APT path does it automatically):
 
 ```sh
-# libportaudio2 = audio (required); xdotool/xclip = X11; wtype/ydotool/wl-clipboard = Wayland
-sudo apt install libportaudio2 xdotool ydotool wtype xclip wl-clipboard pipx
-sudo usermod -aG input "$USER"   # hotkey needs input-group access; then log out and back in (or reboot)
+yazses setup        # installs audio + injection deps, joins the input group, sets up ydotoold
+# then log out and back in (the input-group change needs a fresh login)
 ```
+
+This installs `libportaudio2` (audio), the X11/Wayland injection tools, adds you to the `input` group, and — on **GNOME/KDE Wayland**, where `wtype` is blocked — sets up `ydotoold` (the only way to inject keystrokes there). Re-run it anytime; it only fixes what's missing.
 
 Then:
 

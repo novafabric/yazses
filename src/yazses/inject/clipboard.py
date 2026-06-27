@@ -3,12 +3,26 @@ import shutil
 import subprocess
 
 
+def _ydotool_ready() -> bool:
+    """ydotool only works with a running ydotoold (its socket must exist).
+
+    Mirrors inject.auto.ydotool_ready (kept local to avoid a circular import).
+    """
+    if not shutil.which("ydotool"):
+        return False
+    sock = os.environ.get("YDOTOOL_SOCKET")
+    if not sock:
+        runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        sock = os.path.join(runtime, ".ydotool_socket")
+    return os.path.exists(sock)
+
+
 def _paste_cmd_wayland() -> list[str]:
-    if shutil.which("ydotool"):
+    if _ydotool_ready():
         return ["ydotool", "key", "ctrl+v"]
     if shutil.which("wtype"):
         return ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
-    raise RuntimeError("No tool available to send Ctrl+V on Wayland (install ydotool or wtype)")
+    raise RuntimeError("No tool available to send Ctrl+V on Wayland (install ydotool, or wtype on wlroots)")
 
 
 class ClipboardInjector:
@@ -35,7 +49,7 @@ class ClipboardInjector:
             return
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         if is_wayland:
-            if shutil.which("ydotool"):
+            if _ydotool_ready():
                 subprocess.run(["ydotool", "key"] + ["KEY_BACKSPACE"] * count, check=True, timeout=10)
             elif shutil.which("wtype"):
                 args: list[str] = []
@@ -56,7 +70,7 @@ class ClipboardInjector:
             return
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         if is_wayland:
-            if shutil.which("ydotool"):
+            if _ydotool_ready():
                 subprocess.run(["ydotool", "key"] + keys, check=True, timeout=10)
             elif shutil.which("wtype"):
                 args: list[str] = []
