@@ -117,6 +117,36 @@ yazses hotkey command off           # back to single-key auto-detect
 - Holding the **command** key: "save" → Ctrl+S even though it would normally be text;
   "hello there" → ignored (no command matched), nothing typed.
 
+### Voice command reference
+
+Hold the command key (or, with auto-detect, the dictation key) and say one of
+these. Phrases are matched case-insensitively and trailing punctuation is
+ignored, so "Save file." works the same as "save". Spelled-out numbers
+("delete the last **three** words") are accepted.
+
+| Say | Does |
+|---|---|
+| "undo" / "undo that" · "undo N times" | Ctrl+Z (× N) |
+| "save" / "save file" | Ctrl+S |
+| "copy" / "copy that" · "cut" · "paste" | Ctrl+C / Ctrl+X / Ctrl+V |
+| "comment" / "comment this" | toggle comment (Ctrl+/) |
+| "select all" · "select N lines" · "select to end" | selection |
+| "delete the last word" · "delete the last N words" | delete word(s) |
+| "delete the last line" · "delete the last N lines" | delete line(s) |
+| "new line" / "enter" / "press enter" | Enter |
+| "tab" · "escape" · "press backspace" | Tab / Esc / Backspace |
+| "page up" · "page down" | Page Up / Page Down |
+| "go up / down / left / right" (or "move …") | arrow keys |
+| "end of line" · "beginning of line" | End / Home |
+| "go to line N" | jump to line N |
+| "go to function NAME" · "go to class NAME" · "open file NAME" | editor navigation |
+| "run the tests" · "run the build" · "run CMD" | run in terminal |
+| "rename this to NAME" | rename symbol (F2) |
+
+Don't see a command you want? Tell us — the grammar is easily extended. Natural-
+language commands beyond this fixed list require the optional Tier 2 SLM router
+(`[commands] slm_model_path`), which is off by default.
+
 ## Updating
 
 | Command | Description |

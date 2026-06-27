@@ -23,6 +23,20 @@ ACTION_KEYS: dict[str, list[str]] = {
     "select_to_end": ["ctrl+shift+End"],
     "delete_lines":  [],                # dispatcher uses backspace
     "delete_words":  [],                # dispatcher uses ctrl+BackSpace
+    # Basic keystrokes.
+    "cut":             ["ctrl+x"],
+    "press_enter":     ["Return"],
+    "press_tab":       ["Tab"],
+    "press_escape":    ["Escape"],
+    "press_backspace": ["BackSpace"],
+    "page_up":         ["Page_Up"],
+    "page_down":       ["Page_Down"],
+    "line_home":       ["Home"],
+    "line_end":        ["End"],
+    "arrow_up":        ["Up"],
+    "arrow_down":      ["Down"],
+    "arrow_left":      ["Left"],
+    "arrow_right":     ["Right"],
 }
 
 

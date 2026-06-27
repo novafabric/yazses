@@ -36,6 +36,16 @@ def _normalise_numwords(text: str) -> str:
     return pattern.sub(lambda m: _NUM_WORDS[m.group(1).lower()], text)
 
 
+# Sentence punctuation Whisper adds to short utterances ("Undo." / "Save file.")
+# that would otherwise break the anchored ^...$ command patterns. Stripped from
+# both ends before matching; interior punctuation (e.g. "main.py") is preserved.
+_OUTER_PUNCT = " \t\r\n.,!?;:\"'`…"
+
+
+def _strip_outer_punct(text: str) -> str:
+    return text.strip().strip(_OUTER_PUNCT).strip()
+
+
 # Grammar rules: (compiled_pattern, IntentType, action_name, arg_names_from_groups)
 # Each rule: pattern must match the full (stripped, lowercased) text or a leading/trailing command phrase.
 # Rules are evaluated in order; first match wins.
@@ -62,8 +72,24 @@ _add(r'^select\s+(\d+)\s+lines?$', IntentType.EDIT, "select_lines", ["n"])
 _add(r'^select\s+(?:to\s+)?end$', IntentType.EDIT, "select_to_end", [])
 _add(r'^select\s+all$', IntentType.EDIT, "select_all", [])
 
+# Basic keystroke commands (the keys any command mode is expected to handle).
+_add(r'^(?:press\s+)?(?:enter|return)$', IntentType.EDIT, "press_enter", [])
+_add(r'^new\s+line$', IntentType.EDIT, "press_enter", [])
+_add(r'^(?:press\s+)?tab$', IntentType.EDIT, "press_tab", [])
+_add(r'^(?:press\s+)?(?:escape|esc)$', IntentType.EDIT, "press_escape", [])
+_add(r'^(?:press\s+)?backspace$', IntentType.EDIT, "press_backspace", [])
+_add(r'^cut(?:\s+(?:that|this|line|selection))?$', IntentType.EDIT, "cut", [])
+
 # NAVIGATE commands
 _add(r'^go\s+to\s+line\s+(\d+)$', IntentType.NAVIGATE, "go_to_line", ["n"])
+_add(r'^page\s+up$', IntentType.NAVIGATE, "page_up", [])
+_add(r'^page\s+down$', IntentType.NAVIGATE, "page_down", [])
+_add(r'^(?:go\s+to\s+)?(?:start|beginning)\s+of\s+(?:the\s+)?line$', IntentType.NAVIGATE, "line_home", [])
+_add(r'^(?:go\s+to\s+)?end\s+of\s+(?:the\s+)?line$', IntentType.NAVIGATE, "line_end", [])
+_add(r'^(?:go|move)\s+up$', IntentType.NAVIGATE, "arrow_up", [])
+_add(r'^(?:go|move)\s+down$', IntentType.NAVIGATE, "arrow_down", [])
+_add(r'^(?:go|move)\s+left$', IntentType.NAVIGATE, "arrow_left", [])
+_add(r'^(?:go|move)\s+right$', IntentType.NAVIGATE, "arrow_right", [])
 _add(r'^(?:go\s+to|jump\s+to|find)\s+(?:function|method|def)\s+(.+)$', IntentType.NAVIGATE, "go_to_function", ["name"])
 _add(r'^(?:go\s+to|jump\s+to|find)\s+class\s+(.+)$', IntentType.NAVIGATE, "go_to_class", ["name"])
 _add(r'^(?:go\s+to|open)\s+file\s+(.+)$', IntentType.NAVIGATE, "go_to_file", ["name"])
@@ -108,7 +134,7 @@ def classify(
                 raw_text=text,
             )
 
-    normalised = _normalise_numwords(text.strip())
+    normalised = _normalise_numwords(_strip_outer_punct(text))
 
     for pattern, intent, action, arg_names in _RULES:
         m = pattern.match(normalised)

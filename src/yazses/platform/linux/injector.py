@@ -34,6 +34,12 @@ def _ydotool_key_name(combo: str) -> str:
         "BackSpace": "KEY_BACKSPACE",
         "Tab": "KEY_TAB",
         "Escape": "KEY_ESC",
+        # Multi-word names whose KEY_<UPPER> fallback would be wrong
+        # (KEY_PAGE_UP ≠ KEY_PAGEUP).
+        "Page_Up": "KEY_PAGEUP",
+        "Page_Down": "KEY_PAGEDOWN",
+        "Home": "KEY_HOME",
+        "End": "KEY_END",
     }
     parts = combo.split("+")
     result = []
