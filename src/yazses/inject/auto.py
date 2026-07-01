@@ -13,7 +13,12 @@ def ydotool_socket_path() -> str:
     sock = os.environ.get("YDOTOOL_SOCKET")
     if sock:
         return sock
-    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        # os.getuid is Unix-only; ydotool is Linux-only anyway, but keep this
+        # importable/callable on Windows so cross-platform tests don't crash.
+        uid = os.getuid() if hasattr(os, "getuid") else 0
+        runtime = f"/run/user/{uid}"
     return os.path.join(runtime, ".ydotool_socket")
 
 

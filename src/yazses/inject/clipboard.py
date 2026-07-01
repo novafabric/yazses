@@ -21,7 +21,10 @@ def _ydotool_ready() -> bool:
         return False
     sock = os.environ.get("YDOTOOL_SOCKET")
     if not sock:
-        runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        runtime = os.environ.get("XDG_RUNTIME_DIR")
+        if not runtime:
+            uid = os.getuid() if hasattr(os, "getuid") else 0
+            runtime = f"/run/user/{uid}"
         sock = os.path.join(runtime, ".ydotool_socket")
     return os.path.exists(sock)
 
