@@ -54,15 +54,32 @@ _RELEASE_ALL_TYPED_KEYS = [f"{code}:0" for code in range(2, 58)]
 
 
 class YdotoolInjector:
+    # ~12 ms/char (6 ms between events + 6 ms hold): faster than ydotool's 20/20
+    # default so long dictations don't crawl, but slow enough that the compositor
+    # doesn't drop characters mid-string.
+    _KEY_DELAY_MS = 6
+    _KEY_HOLD_MS = 6
+
     def inject(self, text: str) -> None:
-        subprocess.run(["ydotool", "type", "--", text], check=True, timeout=10)
-        if text:
-            # Flood guard — release any key the compositor failed to release.
-            subprocess.run(
-                ["ydotool", "key"] + _RELEASE_ALL_TYPED_KEYS,
-                check=False,
-                timeout=5,
-            )
+        if not text:
+            return
+        # Scale the timeout with length so a long dictation never times out. A
+        # timeout looks like a failure to LinuxInjector and triggers the clipboard
+        # fallback, which re-injects the WHOLE text — the "typed twice" bug. Budget
+        # 30 ms/char (~2.5x the real ~12 ms) plus a base.
+        timeout = 10.0 + len(text) * 0.03
+        subprocess.run(
+            ["ydotool", "type", "-d", str(self._KEY_DELAY_MS),
+             "-H", str(self._KEY_HOLD_MS), "--", text],
+            check=True,
+            timeout=timeout,
+        )
+        # Flood guard — release any key the compositor failed to release.
+        subprocess.run(
+            ["ydotool", "key"] + _RELEASE_ALL_TYPED_KEYS,
+            check=False,
+            timeout=5,
+        )
 
     def inject_backspaces(self, count: int) -> None:
         if count <= 0:

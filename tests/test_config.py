@@ -10,7 +10,7 @@ def test_defaults():
     assert cfg.hotkey.hold_threshold_ms == 500
     assert cfg.audio.sample_rate == 16000
     assert cfg.audio.channels == 1
-    assert cfg.audio.max_record_seconds == 90
+    assert cfg.audio.max_record_seconds == 300
     assert cfg.injection.backend == "auto"
     assert cfg.injection.fallback_to_clipboard is True
     assert cfg.general.log_level == "INFO"

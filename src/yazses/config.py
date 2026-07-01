@@ -37,7 +37,9 @@ class HotkeyConfig:
 class AudioConfig:
     sample_rate: int = 16000
     channels: int = 1
-    max_record_seconds: int = 90
+    # Hard cap on a single hold-to-talk recording. Generous so long dictations
+    # aren't cut off mid-sentence; raise further in config for very long takes.
+    max_record_seconds: int = 300
 
 
 @dataclass
