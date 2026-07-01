@@ -61,6 +61,10 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Make manual re-publishes idempotent: skip a version already on PyPI
+          # rather than failing the job with "file already exists".
+          skip-existing: true
 
   release-linux:
     # Builds the .deb, creates the GitHub Release, and uploads the artifact
