@@ -113,7 +113,10 @@ class FiltersConfig:
 @dataclass
 class AccessibilityConfig:
     min_silence_ms: int = 500
-    pre_speech_padding_ms: int = 200
+    # Silence lead-in prepended before STT decode. faster-whisper drops/clips the
+    # first word when a clip starts abruptly mid-utterance; a short lead-in gives
+    # it a clean onset boundary so the opening word survives.
+    pre_speech_padding_ms: int = 300
     vad_source: str = "default"
     vad_threshold: float = 0.01
     # v0.8.0 — Dysfluency-Friendly Mode master preset (ADR-015): enables the

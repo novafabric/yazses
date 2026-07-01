@@ -9,7 +9,7 @@ so command mode appeared to do nothing.
 import pytest
 
 from yazses.commands.grammar import IntentType, classify
-from yazses.platform.linux.injector import _ydotool_key_name
+from yazses.inject.ydotool import ydotool_key_args
 
 
 @pytest.mark.parametrize("text,action", [
@@ -71,13 +71,24 @@ def test_plain_dictation_still_dictation():
     assert intent.intent == IntentType.DICTATE
 
 
-@pytest.mark.parametrize("combo,expected", [
-    ("Page_Up", "KEY_PAGEUP"),
-    ("Page_Down", "KEY_PAGEDOWN"),
-    ("Home", "KEY_HOME"),
-    ("End", "KEY_END"),
-    ("Return", "KEY_ENTER"),
-    ("ctrl+x", "KEY_LEFTCTRL+KEY_X"),
+@pytest.mark.parametrize("combo,names", [
+    ("Page_Up", ["KEY_PAGEUP"]),
+    ("Page_Down", ["KEY_PAGEDOWN"]),
+    ("Home", ["KEY_HOME"]),
+    ("End", ["KEY_END"]),
+    ("Return", ["KEY_ENTER"]),
+    ("ctrl+x", ["KEY_LEFTCTRL", "KEY_X"]),
 ])
-def test_ydotool_key_mapping(combo, expected):
-    assert _ydotool_key_name(combo) == expected
+def test_ydotool_key_args_numeric(combo, names):
+    # ydotool's `key` ignores symbolic names — args must be numeric
+    # <keycode>:<state>, pressed in order then released in reverse.
+    from evdev import ecodes
+    codes = [getattr(ecodes, n) for n in names]
+    expected = [f"{c}:1" for c in codes] + [f"{c}:0" for c in reversed(codes)]
+    assert ydotool_key_args(combo) == expected
+
+
+def test_ydotool_ctrl_v_exact_keycodes():
+    # Regression guard for the clipboard-paste bug: Ctrl+V must be exactly
+    # LEFTCTRL(29) down, V(47) down, V up, LEFTCTRL up.
+    assert ydotool_key_args("ctrl+v") == ["29:1", "47:1", "47:0", "29:0"]

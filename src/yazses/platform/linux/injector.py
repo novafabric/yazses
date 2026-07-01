@@ -9,6 +9,7 @@ import subprocess
 from yazses.inject.auto import get_injector
 from yazses.inject.base import BaseInjector
 from yazses.inject.clipboard import ClipboardInjector
+from yazses.inject.ydotool import ydotool_key_args
 
 
 def _xdotool_key_str(combo: str) -> str:
@@ -16,44 +17,6 @@ def _xdotool_key_str(combo: str) -> str:
     return combo.replace("meta", "super")
 
 
-def _ydotool_key_name(combo: str) -> str:
-    """Convert 'ctrl+z' → 'KEY_LEFTCTRL+KEY_Z' for ydotool."""
-    _mod_map = {
-        "ctrl": "KEY_LEFTCTRL",
-        "shift": "KEY_LEFTSHIFT",
-        "alt": "KEY_LEFTALT",
-        "meta": "KEY_LEFTMETA",
-        "super": "KEY_LEFTMETA",
-    }
-    _key_map = {
-        "Return": "KEY_ENTER",
-        "Left": "KEY_LEFT",
-        "Right": "KEY_RIGHT",
-        "Up": "KEY_UP",
-        "Down": "KEY_DOWN",
-        "BackSpace": "KEY_BACKSPACE",
-        "Tab": "KEY_TAB",
-        "Escape": "KEY_ESC",
-        # Multi-word names whose KEY_<UPPER> fallback would be wrong
-        # (KEY_PAGE_UP ≠ KEY_PAGEUP).
-        "Page_Up": "KEY_PAGEUP",
-        "Page_Down": "KEY_PAGEDOWN",
-        "Home": "KEY_HOME",
-        "End": "KEY_END",
-    }
-    parts = combo.split("+")
-    result = []
-    for p in parts:
-        low = p.lower()
-        if low in _mod_map:
-            result.append(_mod_map[low])
-        elif p in _key_map:
-            result.append(_key_map[p])
-        elif len(p) == 1:
-            result.append(f"KEY_{p.upper()}")
-        else:
-            result.append(f"KEY_{p.upper()}")
-    return "+".join(result)
 
 
 class LinuxInjector:
@@ -93,8 +56,9 @@ class LinuxInjector:
         if self._is_wayland:
             if shutil.which("ydotool"):
                 for combo in keys:
+                    # ydotool's `key` ignores symbolic names; use numeric keycodes.
                     subprocess.run(
-                        ["ydotool", "key", _ydotool_key_name(combo)],
+                        ["ydotool", "key"] + ydotool_key_args(combo),
                         check=True,
                         timeout=5,
                     )

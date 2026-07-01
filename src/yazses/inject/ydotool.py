@@ -1,15 +1,74 @@
 import subprocess
 
 
+def ydotool_key_args(combo: str) -> list[str]:
+    """Convert a key combo into ydotool 1.x ``key`` tokens.
+
+    ydotool's ``key`` command takes **numeric** ``<keycode>:<state>`` tokens and
+    *silently ignores* symbolic names — ``ydotool key ctrl+v`` and even
+    ``ydotool key KEY_LEFTCTRL+KEY_V`` emit no events at all (verified against
+    ydotoold's virtual input device). Only ``29:1 47:1 47:0 29:0`` works.
+
+    Given a combo like ``"ctrl+v"``, ``"shift+Left"`` or ``"KEY_BACKSPACE"``,
+    return the press-in-order / release-in-reverse keycode tokens, e.g.
+    ``["29:1", "47:1", "47:0", "29:0"]`` for Ctrl+V.
+    """
+    # Imported lazily: evdev is Linux-only, but this module is imported on every
+    # platform via inject.auto. The function only ever runs on Linux.
+    from evdev import ecodes
+
+    aliases = {
+        "ctrl": "KEY_LEFTCTRL", "control": "KEY_LEFTCTRL",
+        "shift": "KEY_LEFTSHIFT", "alt": "KEY_LEFTALT",
+        "meta": "KEY_LEFTMETA", "super": "KEY_LEFTMETA", "win": "KEY_LEFTMETA",
+        "return": "KEY_ENTER", "enter": "KEY_ENTER", "backspace": "KEY_BACKSPACE",
+        "tab": "KEY_TAB", "escape": "KEY_ESC", "esc": "KEY_ESC",
+        "left": "KEY_LEFT", "right": "KEY_RIGHT", "up": "KEY_UP", "down": "KEY_DOWN",
+        "home": "KEY_HOME", "end": "KEY_END",
+        "page_up": "KEY_PAGEUP", "page_down": "KEY_PAGEDOWN",
+        "delete": "KEY_DELETE", "del": "KEY_DELETE", "space": "KEY_SPACE",
+    }
+    codes: list[int] = []
+    for part in (p for p in combo.split("+") if p):
+        low = part.lower()
+        if low in aliases:
+            name = aliases[low]
+        elif part.upper().startswith("KEY_"):
+            name = part.upper()
+        else:
+            name = f"KEY_{part.upper()}"
+        code = getattr(ecodes, name, None)
+        if code is None:
+            raise ValueError(f"ydotool: unknown key {part!r} (resolved to {name})")
+        codes.append(code)
+    return [f"{c}:1" for c in codes] + [f"{c}:0" for c in reversed(codes)]
+
+
+# Every keycode `ydotool type` can press: the number row through space, plus both
+# shifts (Linux input-event-codes 2..57). After typing we send a key-up for all of
+# them so that if the compositor dropped the real final key-up (Ubuntu 26+ mutter
+# does this intermittently with synthetic input), no character can stay "held" and
+# auto-repeat into a flood (`mmmm…`). A key-up for a key that isn't down is a
+# harmless no-op, so this is safe and layout-independent.
+_RELEASE_ALL_TYPED_KEYS = [f"{code}:0" for code in range(2, 58)]
+
+
 class YdotoolInjector:
     def inject(self, text: str) -> None:
         subprocess.run(["ydotool", "type", "--", text], check=True, timeout=10)
+        if text:
+            # Flood guard — release any key the compositor failed to release.
+            subprocess.run(
+                ["ydotool", "key"] + _RELEASE_ALL_TYPED_KEYS,
+                check=False,
+                timeout=5,
+            )
 
     def inject_backspaces(self, count: int) -> None:
         if count <= 0:
             return
         subprocess.run(
-            ["ydotool", "key"] + ["KEY_BACKSPACE"] * count,
+            ["ydotool", "key"] + ydotool_key_args("KEY_BACKSPACE") * count,
             check=True,
             timeout=10,
         )
@@ -17,4 +76,7 @@ class YdotoolInjector:
     def inject_key_sequence(self, keys: list[str]) -> None:
         if not keys:
             return
-        subprocess.run(["ydotool", "key"] + keys, check=True, timeout=10)
+        args: list[str] = []
+        for combo in keys:
+            args += ydotool_key_args(combo)
+        subprocess.run(["ydotool", "key"] + args, check=True, timeout=10)

@@ -28,25 +28,32 @@ def test_wayland_prefers_ydotool_when_daemon_running(monkeypatch):
         assert isinstance(get_injector(), YdotoolInjector)
 
 
-def test_gnome_wayland_prefers_clipboard(monkeypatch):
-    # GNOME (and KDE) force ydotool, whose `type` drops the final key-up and
-    # floods the last character. When wl-copy + ydotoold are present, paste via
-    # the clipboard instead — it sends no per-character keystrokes.
+def test_gnome_wayland_types_by_default(monkeypatch):
+    # Default on GNOME/KDE Wayland is to TYPE (ydotool) — works in every app,
+    # terminals included. The flood guard in YdotoolInjector handles the
+    # Ubuntu-26 dropped-key-up. Clipboard is not auto-selected here.
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")
+    monkeypatch.delenv("YAZSES_INJECTOR", raising=False)
+    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wl-copy"])), \
+         patch("yazses.inject.auto.os.path.exists", return_value=True):
+        assert isinstance(get_injector(), YdotoolInjector)
+
+
+def test_prefer_clipboard_forces_clipboard(monkeypatch):
+    # An explicit override (config/env) can force clipboard-paste on Wayland.
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wl-copy"])), \
+         patch("yazses.inject.auto.os.path.exists", return_value=True):
+        assert isinstance(get_injector("clipboard"), ClipboardInjector)
+
+
+def test_env_override_clipboard(monkeypatch):
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setenv("YAZSES_INJECTOR", "clipboard")
     with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool", "wl-copy"])), \
          patch("yazses.inject.auto.os.path.exists", return_value=True):
         assert isinstance(get_injector(), ClipboardInjector)
-
-
-def test_gnome_wayland_without_wlcopy_falls_back_to_ydotool(monkeypatch):
-    # Without wl-copy the clipboard path is unavailable, so ydotool is the only
-    # working backend on GNOME even though it can flood — a degraded last resort.
-    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
-    with patch("yazses.inject.auto.shutil.which", side_effect=_which(["ydotool"])), \
-         patch("yazses.inject.auto.os.path.exists", return_value=True):
-        assert isinstance(get_injector(), YdotoolInjector)
 
 
 def test_wayland_without_ydotoold_falls_back_to_wtype(monkeypatch):

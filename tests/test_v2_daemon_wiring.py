@@ -107,6 +107,7 @@ def test_cocktail_gate_drops_interferer_before_stt():
     d = _base_daemon(audio)
     d._config.cocktail.enabled = True
     d._config.cocktail.window_ms = 10
+    d._config.accessibility.pre_speech_padding_ms = 0  # isolate the gate (no lead-in)
     d._embedder = _SignEmbedder()
     d._voiceprint = np.array([1.0, 0.0], dtype="float32")
     d._on_hold_end()
@@ -118,8 +119,27 @@ def test_cocktail_dormant_without_voiceprint_passes_all_audio():
     audio = np.full(16000, 0.5, dtype="float32")
     d = _base_daemon(audio)
     d._config.cocktail.enabled = True
+    d._config.accessibility.pre_speech_padding_ms = 0  # isolate the gate (no lead-in)
     d._embedder = _SignEmbedder()
     d._voiceprint = None  # not enrolled → gate is a no-op
+    d._on_hold_end()
+    assert d._engine.audio_len == 16000
+
+
+def test_onset_lead_in_prepended_before_stt():
+    # A silence lead-in is prepended before decode so faster-whisper doesn't drop
+    # the opening word on an abrupt onset. 300 ms @ 16 kHz = 4800 samples.
+    audio = np.full(16000, 0.5, dtype="float32")
+    d = _base_daemon(audio)
+    d._config.accessibility.pre_speech_padding_ms = 300
+    d._on_hold_end()
+    assert d._engine.audio_len == 16000 + 4800
+
+
+def test_onset_lead_in_disabled_when_zero():
+    audio = np.full(16000, 0.5, dtype="float32")
+    d = _base_daemon(audio)
+    d._config.accessibility.pre_speech_padding_ms = 0
     d._on_hold_end()
     assert d._engine.audio_len == 16000
 

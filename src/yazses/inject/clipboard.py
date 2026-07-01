@@ -1,6 +1,15 @@
 import os
 import shutil
 import subprocess
+import time
+
+from yazses.inject.ydotool import ydotool_key_args
+
+# Milliseconds to wait after wl-copy sets the clipboard before sending Ctrl+V, so
+# the new Wayland selection has propagated to the compositor. Without it the
+# immediate paste occasionally fires before the selection is live and nothing is
+# pasted — the text sits on the clipboard but is never typed (intermittent).
+_CLIPBOARD_SETTLE_S = 0.15
 
 
 def _ydotool_ready() -> bool:
@@ -19,7 +28,10 @@ def _ydotool_ready() -> bool:
 
 def _paste_cmd_wayland() -> list[str]:
     if _ydotool_ready():
-        return ["ydotool", "key", "ctrl+v"]
+        # ydotool's `key` ignores symbolic names — use numeric keycodes. `-d 40`
+        # spaces the events out so the compositor reliably sees Ctrl held when V
+        # is pressed (back-to-back events are occasionally missed).
+        return ["ydotool", "key", "-d", "40"] + ydotool_key_args("ctrl+v")
     if shutil.which("wtype"):
         return ["wtype", "-M", "ctrl", "-k", "v", "-m", "ctrl"]
     raise RuntimeError("No tool available to send Ctrl+V on Wayland (install ydotool, or wtype on wlroots)")
@@ -30,6 +42,7 @@ class ClipboardInjector:
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         if is_wayland:
             subprocess.run(["wl-copy", "--", text], check=True, timeout=5)
+            time.sleep(_CLIPBOARD_SETTLE_S)
             subprocess.run(_paste_cmd_wayland(), check=True, timeout=5)
         else:
             subprocess.run(
@@ -50,7 +63,7 @@ class ClipboardInjector:
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         if is_wayland:
             if _ydotool_ready():
-                subprocess.run(["ydotool", "key"] + ["KEY_BACKSPACE"] * count, check=True, timeout=10)
+                subprocess.run(["ydotool", "key"] + ydotool_key_args("KEY_BACKSPACE") * count, check=True, timeout=10)
             elif shutil.which("wtype"):
                 args: list[str] = []
                 for _ in range(count):
@@ -71,7 +84,10 @@ class ClipboardInjector:
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         if is_wayland:
             if _ydotool_ready():
-                subprocess.run(["ydotool", "key"] + keys, check=True, timeout=10)
+                args: list[str] = []
+                for combo in keys:
+                    args += ydotool_key_args(combo)
+                subprocess.run(["ydotool", "key"] + args, check=True, timeout=10)
             elif shutil.which("wtype"):
                 args: list[str] = []
                 for key in keys:

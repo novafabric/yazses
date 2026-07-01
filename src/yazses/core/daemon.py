@@ -524,6 +524,20 @@ class Daemon:
             )
 
             bias_prompt = self._effective_initial_prompt()
+
+            # Prepend a short silence lead-in so faster-whisper doesn't drop the
+            # opening word on an abrupt onset. Done here (after the VAD gate) so
+            # the added zeros never lower the measured level and cause a false
+            # "silent" discard. Streaming commits its own buffer, so skip there.
+            decode_audio = padded
+            lead_ms = self._config.accessibility.pre_speech_padding_ms
+            if lead_ms > 0:
+                lead = np.zeros(
+                    int(lead_ms * self._config.audio.sample_rate / 1000),
+                    dtype=padded.dtype,
+                )
+                decode_audio = np.concatenate([lead, padded])
+
             audio_secs = padded.size / self._config.audio.sample_rate
             # Prosody Ink (batch only) needs per-word timestamps; capture them on
             # the non-streaming path when [prosody] enabled, else use the fast
@@ -536,13 +550,13 @@ class Daemon:
                 text = self._stream_engine.commit()
             elif want_prosody:
                 text, prosody_words = self._engine.transcribe_words(
-                    padded,
+                    decode_audio,
                     self._config.audio.sample_rate,
                     initial_prompt=bias_prompt,
                 )
             else:
                 text = self._engine.transcribe(
-                    padded,
+                    decode_audio,
                     self._config.audio.sample_rate,
                     initial_prompt=bias_prompt,
                 )

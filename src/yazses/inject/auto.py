@@ -29,32 +29,37 @@ def ydotool_ready() -> bool:
 
 
 def wl_copy_ready() -> bool:
-    """True when wl-copy is installed — required for clipboard-paste injection
-    on Wayland."""
+    """True when wl-copy is installed — required for clipboard-paste injection."""
     return bool(shutil.which("wl-copy"))
 
 
-def _is_gnome_or_kde() -> bool:
-    """GNOME and KDE block wtype and force ydotool for injection. ydotool's
-    ``type`` command drops the final key-up event on those compositors, so the
-    kernel treats the last key as held and auto-repeats it (a flood of
-    ``mmmm…``). Detect them so we can paste via the clipboard instead, which
-    sends no per-character keystrokes and therefore cannot stick."""
-    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-    return any(marker in desktop for marker in ("gnome", "kde", "plasma"))
+def get_injector(prefer: str = "auto") -> BaseInjector:
+    """Select an injection backend.
 
+    ``prefer`` = ``"auto"`` (default) | ``"type"``/``"ydotool"`` | ``"clipboard"``
+    | ``"wtype"``. With ``"auto"`` an override may be supplied via the
+    ``YAZSES_INJECTOR`` environment variable.
 
-def get_injector() -> BaseInjector:
+    On Wayland, ``auto`` **types** the text with ydotool — this works in *every*
+    focused app, terminals included, and does not touch the clipboard.
+    ``YdotoolInjector`` guards against the Ubuntu-26+ compositor occasionally
+    dropping the final key-up (which otherwise leaves the last character
+    auto-repeating — the ``mmmm…`` flood). ``clipboard`` forces wl-copy + Ctrl+V,
+    which is instant but is a no-op in terminals (where Ctrl+V is literal) and
+    overwrites the clipboard.
+    """
+    prefer = (prefer or "auto").strip().lower()
+    if prefer == "auto":
+        prefer = (os.environ.get("YAZSES_INJECTOR", "auto") or "auto").strip().lower()
+
+    if prefer == "clipboard":
+        return ClipboardInjector()
+
     is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
     if is_wayland:
-        # GNOME/KDE: `ydotool type` drops the final key-up and the kernel
-        # auto-repeats the last character. Clipboard-paste (wl-copy + one
-        # Ctrl+V) sends no per-character keystrokes, so it can't stick — prefer
-        # it whenever a paste path (ydotoold) and wl-copy are both available.
-        if _is_gnome_or_kde() and ydotool_ready() and wl_copy_ready():
-            return ClipboardInjector()
-        # Other Wayland compositors: ydotool when its daemon is up, else wtype
-        # (wlroots-only); neither exhibits the GNOME/KDE stuck-key flood.
+        if prefer == "wtype" and shutil.which("wtype"):
+            return WtypeInjector()
+        # auto / type / ydotool: prefer typing — works everywhere, incl. terminals.
         if ydotool_ready():
             return YdotoolInjector()
         if shutil.which("wtype"):
