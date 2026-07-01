@@ -1,10 +1,16 @@
 """Tests for the X11GrabHotkey backend."""
 from __future__ import annotations
 
+import sys
 import threading
 import time
 
 import pytest
+
+# X11GrabHotkey pulls in python-xlib, a Linux-only dependency.
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux", reason="X11/Xlib is Linux-only"
+)
 
 
 def _make_hotkey(key_id="space", threshold_ms=300, on_start=None, on_end=None):

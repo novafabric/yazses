@@ -6,10 +6,16 @@ period ("Undo." not "undo"), which broke the anchored ^...$ command patterns —
 so command mode appeared to do nothing.
 """
 
+import sys
+
 import pytest
 
 from yazses.commands.grammar import IntentType, classify
 from yazses.inject.ydotool import ydotool_key_args
+
+_linux_only = pytest.mark.skipif(
+    sys.platform != "linux", reason="ydotool_key_args resolves keycodes via Linux evdev"
+)
 
 
 @pytest.mark.parametrize("text,action", [
@@ -71,6 +77,7 @@ def test_plain_dictation_still_dictation():
     assert intent.intent == IntentType.DICTATE
 
 
+@_linux_only
 @pytest.mark.parametrize("combo,names", [
     ("Page_Up", ["KEY_PAGEUP"]),
     ("Page_Down", ["KEY_PAGEDOWN"]),
@@ -88,6 +95,7 @@ def test_ydotool_key_args_numeric(combo, names):
     assert ydotool_key_args(combo) == expected
 
 
+@_linux_only
 def test_ydotool_ctrl_v_exact_keycodes():
     # Regression guard for the clipboard-paste bug: Ctrl+V must be exactly
     # LEFTCTRL(29) down, V(47) down, V up, LEFTCTRL up.

@@ -6,6 +6,10 @@ key-repeat event ~0.5 s later and clips the first words of speech. Character key
 (space) keep the threshold gate + leaked-character cleanup.
 """
 
+import pytest
+
+pytest.importorskip("evdev", reason="evdev is a Linux-only dependency")
+
 from evdev import ecodes
 
 from yazses.hotkeys.evdev_hold import EvdevHoldListener

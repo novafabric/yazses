@@ -7,6 +7,10 @@ picks it and never sees the user's keypresses (the hold-to-talk hotkey appears
 dead). See evdev_hold._find_keyboard.
 """
 
+import pytest
+
+pytest.importorskip("evdev", reason="evdev is a Linux-only dependency")
+
 from evdev import ecodes
 
 from yazses.hotkeys.evdev_hold import EvdevHoldListener
