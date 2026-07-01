@@ -14,6 +14,12 @@ authors:
     email: mohsen.seyedkazemi@gmail.com
 repository-code: https://github.com/MSKazemi/yazses
 url: https://github.com/MSKazemi/yazses
+version: 1.4.1
+date-released: "2026-07-01"
+identifiers:
+  - type: url
+    value: https://pypi.org/project/yazses/
+    description: PyPI package
 license: Apache-2.0
 keywords:
   - voice dictation
