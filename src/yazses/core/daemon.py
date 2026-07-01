@@ -977,6 +977,15 @@ class Daemon:
 
     # ---- IPC handlers ------------------------------------------------------
 
+    def _injection_backend_name(self) -> str | None:
+        """The concrete injector in use. Wrappers (e.g. LinuxInjector) expose the
+        selected primary via ``backend_name`` — prefer it so status/doctor report
+        the real backend (ClipboardInjector, YdotoolInjector, …) rather than the
+        opaque wrapper class."""
+        if self._injector is None:
+            return None
+        return getattr(self._injector, "backend_name", None) or type(self._injector).__name__
+
     def _handle_status(self, _request: Request) -> dict[str, object]:
         with self._lock:
             uptime = (time.monotonic() - self._state.started_at) if self._state.started_at else 0.0
@@ -984,7 +993,7 @@ class Daemon:
                 "state": self._state.state.value,
                 "model": self._config.stt.model,
                 "hotkey": self._resolved_hotkey(),
-                "injection_backend": type(self._injector).__name__ if self._injector else None,
+                "injection_backend": self._injection_backend_name(),
                 "last_error": self._state.last_error,
                 "uptime_s": round(uptime, 2),
                 "platform": self._platform.name,
