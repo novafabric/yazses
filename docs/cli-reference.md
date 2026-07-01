@@ -185,6 +185,41 @@ After a successful update, restart the daemon to load it:
 | `yazses punch-in --choose N` | Apply the candidate at rank `N` (0 = best match). |
 | `yazses say "text"` | Speak text aloud through the offline TTS voice (Read-Back Loop). Requires `[tts] enabled = true`. |
 
+### Choosing the injection backend
+
+YazSes types your words into the focused app. On Wayland the default (`auto`)
+**types** via ydotool, which works in every app — editors, browsers, **and
+terminals** — and never touches your clipboard. If you'd rather paste (instant,
+but does nothing in terminals where `Ctrl+V` is literal, and overwrites the
+clipboard), set the backend:
+
+```toml
+[injection]
+backend = "clipboard"   # "auto" (default) | "type" | "clipboard" | "wtype"
+```
+
+Or per-run without editing config: `YAZSES_INJECTOR=clipboard`. Run `yazses
+restart` after changing it. `yazses status` shows the backend actually in use.
+
+### Voice punctuation (opt-in)
+
+Enable with `yazses features enable voice-punctuation`, then speak the name of a
+mark to insert it (say `yazses restart` after enabling):
+
+| Say | Inserts |
+|---|---|
+| "comma" | `,` |
+| "period" / "full stop" | `.` |
+| "question mark" | `?` |
+| "exclamation mark" | `!` |
+| "colon" / "semicolon" | `:` / `;` |
+| "new line" | line break |
+| "new paragraph" | blank line |
+| "tab key" | tab |
+
+Example: *"the tests pass comma ship it period"* → `the tests pass, ship it.`
+It is **off by default** because these words also appear in ordinary speech.
+
 ## Voice-activity overlay (sonar)
 
 A standalone process that draws neon "sonar" rings near the cursor, expanding and

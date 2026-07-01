@@ -39,6 +39,7 @@ from yazses.postprocess.llm_cleanup import LlmCleaner, build_cleaner
 from yazses.postprocess.prosody import Word, annotate
 from yazses.postprocess.punch_in import apply_top_candidate
 from yazses.postprocess.spacing import continuation_prefix
+from yazses.postprocess.voice_punctuation import apply_voice_punctuation
 from yazses.remote.forwarder import RemoteForwarder
 from yazses.remote.local_proxy import RemoteInjectorProxy
 from yazses.stt.endpoint import EndpointAnticipator
@@ -250,8 +251,15 @@ class Daemon:
             compute_type=cfg.stt.compute_type,
         )
 
+        # [injection] backend selects the Linux injector (type | ydotool |
+        # clipboard | wtype | auto). Bridged through the env var that
+        # inject.auto.get_injector already honours, so no platform factory
+        # signatures change; non-Linux platforms simply ignore it.
+        backend = (self._config.injection.backend or "auto").strip().lower()
+        if backend and backend != "auto":
+            os.environ["YAZSES_INJECTOR"] = backend
         self._injector = self._platform.injector_factory()
-        log.info("Injection backend: %s", type(self._injector).__name__)
+        log.info("Injection backend: %s", self._injection_backend_name())
 
         if cfg.streaming.enabled:
             self._stream_engine = StreamingEngine(
@@ -645,6 +653,10 @@ class Daemon:
 
             if is_dictation:
                 text = self._clean_dictation(text, event)
+                # Spoken punctuation/formatting ("comma" -> ","). Opt-in.
+                if self._config.commands.voice_punctuation:
+                    text = apply_voice_punctuation(text)
+                    event["final_text"] = text
                 # Prosody Ink: map vocal prosody (inter-word pause, emphasis) onto
                 # text formatting. Batch + dictation only; word timings drive the
                 # spacing/emphasis, content stays the cleaned text. Off by default.

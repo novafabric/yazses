@@ -83,6 +83,7 @@ def _registry() -> list[_Def]:
     pg_on, pg_off = _bool("polyglot")
     llm_on, llm_off = _bool("filters.disfluency", "llm_enabled")
     dys_on, dys_off = _bool("accessibility", "dysfluency_friendly")
+    vp_on, vp_off = _bool("commands", "voice_punctuation")
 
     return [
         _Def("dictation", "Dictation core", "always on", CORE,
@@ -91,6 +92,10 @@ def _registry() -> list[_Def]:
         _Def("commands", "Voice commands", "[commands]", DEFAULT_ON,
              "Spoken commands like 'undo', 'save', 'delete last word'. Keep on.",
              lambda c: c.commands.enabled, c_on, c_off),
+        _Def("voice-punctuation", "Voice punctuation", "[commands] voice_punctuation", OPTIONAL,
+             "Say 'comma', 'period', 'new line', 'question mark' to insert marks. "
+             "Off by default — those words also occur in ordinary speech.",
+             lambda c: c.commands.voice_punctuation, vp_on, vp_off),
         _Def("undo", "Mid-Thought Undo", "[revise] — say 'scratch that'", DEFAULT_ON,
              "Say 'scratch that' to drop the last phrase. Keep on.",
              lambda c: c.revise.enabled, r_on, r_off),

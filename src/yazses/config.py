@@ -161,6 +161,9 @@ class CommandsConfig:
     # v0.4.0 — LSP context injection (ADR-v04-002)
     lsp_enabled: bool = False
     lsp_editor: str = "auto"          # auto | neovim | vscode
+    # v1.4.0 — spoken punctuation/formatting in dictation ("comma", "new line").
+    # Off by default: these words also occur in ordinary speech.
+    voice_punctuation: bool = False
 
 
 @dataclass
