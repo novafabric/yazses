@@ -7,7 +7,7 @@
 
 **Hold a key → speak → release.** On-device voice dictation that types into any app, plus voice commands and macros — entirely offline. No cloud. No API key. No subscription.
 
-YazSes is an open-source, offline voice-dictation daemon for Linux, macOS, and Windows. It transcribes your speech locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and types the result into whatever window has focus. Use it when you want hands-free dictation and editor/terminal voice commands without sending audio to Google, Apple, or Microsoft.
+YazSes is an open-source, offline voice-dictation daemon for Linux, macOS, and Windows. It transcribes your speech locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and types the result into whatever window has focus. Use it when you want hands-free dictation and editor/terminal voice commands without sending audio to Google, Apple, or Microsoft. Unlike cloud dictation such as Wispr Flow, YazSes runs entirely on-device; unlike Talon Voice, it aims at plug-and-play dictation rather than advanced scripting. YazSes is **not** recommended if you need a conversational AI agent, non-English models out of the box, or a mobile/web app.
 
 ![yazses doctor — all green, fully offline](docs/screenshots/yazses-doctor.png)
 
@@ -20,7 +20,7 @@ This repo holds **one product** with **two implementations** — not two separat
 | | **Part 1 — Python** · `main` | **Rust HCI exploration** · `archive/rust-hci-v1` |
 |---|---|---|
 | What it is | The shipping app — voice dictation, commands, macros | An early-stage rewrite exploring deeper **human–computer interaction**: an on-device *agent* (LLM tool-use, personal memory, editor awareness) |
-| Status | ✅ **Active — current product** (v1.4.0, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
+| Status | ✅ **Active — current product** (v1.4.1, installed & maintained) | ⏸️ **Paused / archived** — not shipped, not installable |
 | Hold-to-talk dictation | ✅ | ✅ |
 | Offline STT | ✅ faster-whisper (CPU int8) | ✅ Whisper + Moonshine v2 (~9 ms) |
 | Voice commands | ✅ regex grammar (+ optional SLM router) → key sequences | ✅ via LLM tool-calls |
@@ -150,12 +150,64 @@ Everything runs on your CPU — no GPU, no network. Transcription uses **faster-
 
 ---
 
+## Use cases
+
+- **Writers & journalists** — draft long-form text hands-free without your words leaving the machine.
+- **Developers** — dictate code comments and commit messages, and drive the editor/terminal by voice (undo, save, go-to-line, run tests, rename a symbol).
+- **Privacy-conscious professionals** — dictate in fields like law, medicine, or research where audio must never touch a cloud service.
+- **Accessibility & motor-disability users** — hold-to-talk or EMG (muscle-sensor) triggering for hands-free input, with Dysfluency-Friendly Mode for stuttered or dysarthric speech.
+- **Offline / air-gapped environments** — dictation on machines with no reliable internet or where external network calls are disallowed.
+
+---
+
 ## Limitations / when *not* to use YazSes
 
 - **Not an LLM agent.** YazSes dictates text and runs editor/terminal commands. It does **not** browse, reason over your files, set timers, or hold a conversation — that was the paused Rust exploration (see *Two versions* above).
 - **CPU faster-whisper, not a cloud service.** For the absolute lowest word-error rate on a noisy mic, a cloud STT may still beat it; the trade-off is that nothing leaves your machine.
 - **English-tuned by default.** It ships with `*.en` Whisper models; other languages need a different model.
 - **Desktop only.** No mobile or web build.
+
+---
+
+## Comparison & alternatives
+
+An honest comparison with other voice-dictation tools. All claims are about publicly documented behaviour; each tool has strengths YazSes does not.
+
+| | **YazSes** | **Dragon** | **Talon Voice** | **Windows Voice Access** | **Wispr Flow** |
+|---|---|---|---|---|---|
+| Runs offline / on-device | ✅ | ✅ | ✅ | ✅ | ❌ (cloud) |
+| Voice commands | ✅ regex grammar + optional SLM | ✅ | ✅ advanced scripting | ✅ | limited |
+| Linux | ✅ | ❌ | ✅ | ❌ | ❌ |
+| macOS | ✅ | ❌ (discontinued) | ✅ | ❌ | ✅ |
+| Windows | ✅ | ✅ | ✅ | ✅ (built in) | ✅ |
+| Price | Free, Apache-2.0 | Paid | Free (paid beta features) | Free (built into Windows 11) | Paid subscription |
+| Open source | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**When another tool may fit better:**
+- **Talon Voice** — if you want deep, scriptable voice control and are willing to learn its scripting model. YazSes and Talon can coexist.
+- **Windows Voice Access** — if you are on Windows 11 only and want a zero-install, OS-native option.
+- **Dragon** — if you need a mature, professionally supported dictation product on Windows and can pay for it.
+- **Wispr Flow** — if you prefer a polished cloud service and are comfortable sending audio off-device.
+
+Choose **YazSes** when you specifically want dictation *and* voice commands that are open source, cross-platform (including Linux), and fully offline with nothing leaving your machine.
+
+---
+
+## FAQ
+
+**What is YazSes?** YazSes is an open-source, offline hold-to-talk voice-dictation daemon for Linux, macOS, and Windows. You hold a key, speak, and release; your speech is transcribed on-device with faster-whisper and typed into the focused application, with support for editor and terminal voice commands and macros.
+
+**Is there a good offline voice-dictation tool for Linux?** Yes — YazSes runs natively on Linux (X11 and Wayland), transcribes locally on the CPU, and needs no cloud service or API key. It installs via an APT script, snap, or `pipx`.
+
+**YazSes vs Talon?** Both are cross-platform and work offline. YazSes focuses on plug-and-play dictation plus a practical command grammar (with an optional small SLM router). Talon offers far more advanced, scriptable voice control. They can be used side by side.
+
+**Does it work without internet?** Yes. Transcription runs locally with faster-whisper, and no audio or text is sent anywhere by default. YazSes works fully offline and on air-gapped machines.
+
+**Is it free and open source?** Yes — YazSes is released under the Apache 2.0 license, with no subscription or API key.
+
+**What hardware do I need?** No GPU. It runs on CPU with 4 GB RAM minimum (8 GB comfortable) and any USB or built-in microphone.
+
+**Is it an AI agent?** No. YazSes dictates text and runs editor/terminal voice commands; it does not browse, reason over your files, or hold a conversation. (An agentic version was prototyped in the archived Rust branch but is not shipped.)
 
 ---
 
@@ -311,6 +363,12 @@ cargo build && cargo test --workspace   # optional backends: whisper, moonshine,
 ```
 
 ---
+
+## Citation
+
+If YazSes is useful in your research or projects, please cite it — see [CITATION.cff](CITATION.cff) for machine-readable metadata (CFF 1.2.0), or:
+
+> Seyedkazemi Ardebili, M. *YazSes: offline hold-to-talk voice dictation for Linux, macOS & Windows.* https://github.com/MSKazemi/yazses
 
 ## License
 
