@@ -18,11 +18,11 @@ The planning half (`build_plan`) is pure and unit-tested; `apply_plan` runs it.
 from __future__ import annotations
 
 import ctypes.util
-import grp
 import os
-import pwd
 import shutil
 import subprocess
+# NOTE: `grp` and `pwd` are Unix-only; imported lazily inside the functions that
+# use them so this module (and `yazses setup`) stays importable on Windows.
 from dataclasses import dataclass, field
 
 # The robust superset of Debian/Ubuntu runtime packages. We install all of them
@@ -84,6 +84,8 @@ def _user_in_input_group(user: str) -> bool:
     Uses the group database rather than the live session so it reflects whether
     `usermod` has been run (a fresh login may still be pending).
     """
+    import grp
+    import pwd
     try:
         if user in grp.getgrnam("input").gr_mem:
             return True
@@ -144,6 +146,7 @@ def build_plan(
 
 
 def _current_user() -> str:
+    import pwd
     return os.environ.get("SUDO_USER") or os.environ.get("USER") or pwd.getpwuid(os.getuid()).pw_name
 
 
