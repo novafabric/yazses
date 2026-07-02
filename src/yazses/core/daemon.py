@@ -647,6 +647,14 @@ class Daemon:
                 event["intent_type"] = intent.intent.value
                 event["intent_action"] = intent.action
                 if intent.intent == IntentType.DICTATE:
+                    # Spoken Edit Mode (ADR-v2-003): before discarding an unmatched
+                    # command, try to read it as an open-ended edit of the last
+                    # dictation ("change X to Y"). Command-key gated + off by default.
+                    if self._config.commands.spoken_edit:
+                        if stream_injector is not None:
+                            stream_injector.cancel()
+                        if self._try_spoken_edit(text, event):
+                            return
                     event["discard_reason"] = "command_unmatched"
                     log.info("Command mode: no command matched %d-char phrase; "
                              "ignoring (not typed).", len(text))
@@ -988,6 +996,47 @@ class Daemon:
         self._last_dictation_monotonic = time.monotonic()
         log.info("Punch-In: corrected %d chars.", len(last))
         return {"ok": True, "applied": True, "old": last, "new": corrected, "candidates": cand_view}
+
+    def _try_spoken_edit(self, phrase: str, event: dict) -> bool:
+        """Apply an open-ended voice edit to the last dictation (ADR-v2-003).
+
+        Returns True if the phrase was an edit command (so the caller returns
+        without typing it literally). Reuses the Punch-In delete-and-retype
+        mechanism + ledger. Non-destructive ops (replace, recase) apply
+        immediately; destructive ops (delete) are recognised but SKIPPED in P1
+        because the spoken/overlay confirm loop is not wired yet — they are never
+        typed literally. Guarded so it can never break dictation.
+        """
+        try:
+            from yazses.commands.edit_ops import DESTRUCTIVE, apply_edit, parse_edit
+            parsed = parse_edit(phrase)
+            if parsed is None:
+                return False
+            op = parsed[0]
+            if op in DESTRUCTIVE:
+                event["intent_type"] = "spoken_edit_skipped"
+                log.info("Spoken Edit: destructive op '%s' needs confirm; "
+                         "skipped (P1, not typed).", op)
+                return True
+            last = self._ledger.last_text()
+            if not last:
+                return False
+            result = apply_edit(last, phrase)
+            if not result.changed:
+                return False
+            injector = self._active_injector()
+            injector.inject_backspaces(len(last))
+            injector.inject(result.text)
+            self._ledger.replace_last(result.text)
+            self._last_dictation_monotonic = time.monotonic()
+            event["intent_type"] = "spoken_edit"
+            event["spoken_edit_op"] = op
+            log.info("Spoken Edit: %s applied (%d -> %d chars).",
+                     op, len(last), len(result.text))
+            return True
+        except Exception:
+            log.debug("Spoken Edit failed; ignoring", exc_info=True)
+            return False
 
     def _handle_readback_speak(self, request: Request) -> dict[str, object]:
         """IPC: speak arbitrary text via the TTS backend (`yazses say "..."`)."""
