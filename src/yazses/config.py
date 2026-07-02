@@ -164,6 +164,10 @@ class CommandsConfig:
     # v1.4.0 — spoken punctuation/formatting in dictation ("comma", "new line").
     # Off by default: these words also occur in ordinary speech.
     voice_punctuation: bool = False
+    # v2.0.0 Wave A — Spoken Edit Mode (ADR-v2-003): open-ended voice editing of the
+    # last-injected span ("change X to Y", "delete the last sentence"). Command-key
+    # gated to avoid dictate-vs-command ambiguity. OFF by default.
+    spoken_edit: bool = False
 
 
 @dataclass
@@ -344,6 +348,9 @@ class ProsodyConfig:
     enabled: bool = False
     format: str = "none"              # none | markdown
     pause_paragraph_ms: int = 700     # inter-word gap (ms) at/above which a ¶ is inserted
+    # v2.0.0 Wave A — pause→sentence punctuation (ADR-v2-002). 0 disables; when >0, a gap
+    # at/above this (but below pause_paragraph_ms) inserts a sentence-ending period.
+    pause_sentence_ms: int = 0
     emphasis_enabled: bool = True     # bold prominent words (only when format renders bold)
     emphasis_sensitivity: float = 0.65  # 0..1; higher = fewer, surer bolds (precision bias)
     experimental_pitch_question: bool = False
@@ -395,6 +402,36 @@ class OverlayConfig:
 
 
 @dataclass
+class ConfidenceConfig:
+    """v2.0.0 Wave A — Confidence Ink & Voice Re-pick (ADR-v2-001).
+
+    Surface Whisper's per-word confidence (derived from token log-probabilities) so
+    low-confidence words can be marked (overlay) and re-picked by voice instead of
+    re-dictated. OFF by default; pure post-processing over the decode output.
+    """
+    enabled: bool = False
+    threshold: float = 0.55           # words at/below this confidence (0..1) are flagged
+    mark_in_overlay: bool = True      # show markers via the overlay when available
+
+
+@dataclass
+class ContextConfig:
+    """v2.0.0 Wave A — Context-Primed Dictation & Commanding (ADR-v2-004).
+
+    Compose Whisper's initial_prompt from already-consented, transient desktop
+    signals (active window title, selection, clipboard, editor LSP symbols) and
+    resolve deictic commands against them. OFF by default; content is read at decode
+    time and NEVER stored or logged.
+    """
+    enabled: bool = False
+    use_window_title: bool = True
+    use_selection: bool = True
+    use_clipboard: bool = False       # clipboard is the broadest signal; opt-in separately
+    use_lsp: bool = True
+    max_terms: int = 48
+
+
+@dataclass
 class Config:
     stt: SttConfig = field(default_factory=SttConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -420,6 +457,9 @@ class Config:
     cocktail: CocktailConfig = field(default_factory=CocktailConfig)
     personalize: PersonalizeConfig = field(default_factory=PersonalizeConfig)
     polyglot: PolyglotConfig = field(default_factory=PolyglotConfig)
+    # v2.0.0 Wave A (Voice-First Interaction Layer)
+    confidence: ConfidenceConfig = field(default_factory=ConfidenceConfig)
+    context: ContextConfig = field(default_factory=ContextConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -471,6 +511,8 @@ def load_config(path: Path | None = None) -> Config:
         cocktail=CocktailConfig(**data.get("cocktail", {})),
         personalize=PersonalizeConfig(**data.get("personalize", {})),
         polyglot=PolyglotConfig(**data.get("polyglot", {})),
+        confidence=ConfidenceConfig(**data.get("confidence", {})),
+        context=ContextConfig(**data.get("context", {})),
     )
     return _apply_presets(cfg)
 
