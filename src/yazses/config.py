@@ -432,6 +432,20 @@ class ContextConfig:
 
 
 @dataclass
+class RecallConfig:
+    """v2.0.0 Wave B — Spoken Recall & Ambient Scratch (ADR-v2-005).
+
+    Query past dictations from the encrypted learning corpus ("what did I say
+    about X") and capture spoken notes-to-self. OFF by default; recall reads the
+    local corpus only (nothing leaves the machine) and scratch notes are a plain
+    local JSONL file.
+    """
+    enabled: bool = False
+    scratch: bool = False             # capture note-to-self phrases to the scratch pad
+    max_hits: int = 5                 # how many recall results to return
+
+
+@dataclass
 class Config:
     stt: SttConfig = field(default_factory=SttConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -460,6 +474,7 @@ class Config:
     # v2.0.0 Wave A (Voice-First Interaction Layer)
     confidence: ConfidenceConfig = field(default_factory=ConfidenceConfig)
     context: ContextConfig = field(default_factory=ContextConfig)
+    recall: RecallConfig = field(default_factory=RecallConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -513,6 +528,7 @@ def load_config(path: Path | None = None) -> Config:
         polyglot=PolyglotConfig(**data.get("polyglot", {})),
         confidence=ConfidenceConfig(**data.get("confidence", {})),
         context=ContextConfig(**data.get("context", {})),
+        recall=RecallConfig(**data.get("recall", {})),
     )
     return _apply_presets(cfg)
 
