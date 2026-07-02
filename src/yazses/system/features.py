@@ -87,6 +87,7 @@ def _registry() -> list[_Def]:
     conf_on, conf_off = _bool("confidence")
     ctx_on, ctx_off = _bool("context")
     se_on, se_off = _bool("commands", "spoken_edit")
+    re_on, re_off = _bool("recall")
 
     return [
         _Def("dictation", "Dictation core", "always on", CORE,
@@ -156,6 +157,10 @@ def _registry() -> list[_Def]:
              "Primes STT with terms from the active window/selection so domain words "
              "are transcribed right. Read transiently, never stored. Off by default.",
              lambda c: c.context.enabled, ctx_on, ctx_off),
+        _Def("recall", "Spoken Recall & Scratch", "[recall] — query past dictation", OPTIONAL,
+             "Search your past dictations ('yazses recall …') and capture spoken "
+             "notes-to-self. Local corpus only; nothing leaves the machine. Off by default.",
+             lambda c: c.recall.enabled, re_on, re_off),
         _Def("cocktail", "Cocktail Filter (voice focus)", "[cocktail] — experimental", EXPERIMENTAL,
              "Tries to focus on your voice and reject other speakers. Currently "
              "over-rejects your OWN voice — leave off until improved.",

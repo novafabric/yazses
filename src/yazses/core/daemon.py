@@ -379,6 +379,8 @@ class Daemon:
         server.register("mark_last_wrong", self._handle_mark_last_wrong)
         server.register("punch_in", self._handle_punch_in)
         server.register("readback_speak", self._handle_readback_speak)
+        server.register("recall", self._handle_recall)
+        server.register("scratch", self._handle_scratch)
         server.serve_in_thread()
         self._ipc_server = server
 
@@ -650,6 +652,14 @@ class Daemon:
                 event["intent_type"] = intent.intent.value
                 event["intent_action"] = intent.action
                 if intent.intent == IntentType.DICTATE:
+                    # Ambient Scratch (ADR-v2-005): capture a note-to-self ("note to
+                    # self ...") to the scratch pad instead of typing it. Command-key
+                    # gated + off by default.
+                    if self._config.recall.scratch:
+                        if stream_injector is not None:
+                            stream_injector.cancel()
+                        if self._try_scratch(text, event):
+                            return
                     # Spoken Edit Mode (ADR-v2-003): before discarding an unmatched
                     # command, try to read it as an open-ended edit of the last
                     # dictation ("change X to Y"). Command-key gated + off by default.
@@ -1075,6 +1085,66 @@ class Daemon:
         except Exception:
             log.debug("Spoken Edit failed; ignoring", exc_info=True)
             return False
+
+    def _scratch_pad(self):
+        """The ambient-scratch note store (ADR-v2-005), rooted in the data dir."""
+        from yazses.recall.scratch import ScratchPad
+        return ScratchPad(self._platform.paths.data_dir / "scratch.jsonl")
+
+    def _try_scratch(self, phrase: str, event: dict) -> bool:
+        """Capture a spoken note-to-self to the scratch pad (ADR-v2-005).
+
+        Returns True if the phrase was a note-to-self (so it is not typed). An empty
+        note (bare trigger) is recognised but not stored. Guarded — never breaks.
+        """
+        try:
+            from yazses.recall.scratch import parse_scratch
+            note = parse_scratch(phrase)
+            if note is None:
+                return False
+            if note:
+                self._scratch_pad().add(note, time.time())
+                event["intent_type"] = "scratch_note"
+                log.info("Ambient Scratch: captured a %d-char note.", len(note))
+            return True
+        except Exception:
+            log.debug("Ambient Scratch failed; ignoring", exc_info=True)
+            return False
+
+    def _handle_recall(self, request: Request) -> dict[str, object]:
+        """IPC: query past dictations from the corpus (Spoken Recall, ADR-v2-005)."""
+        if not self._config.recall.enabled:
+            return {"ok": False, "reason": "recall disabled — set [recall] enabled = true"}
+        if not self._config.learning.enabled:
+            return {"ok": False, "reason": "learning corpus disabled — set [learning] enabled = true"}
+        query = str(request.params.get("query", "")).strip()
+        try:
+            from yazses.learning.capture import open_store
+            from yazses.recall.query import rank_events
+            store = open_store(self._platform.paths.data_dir)
+            try:
+                records = [(e.final_text, e.ts) for e in store.events() if e.final_text]
+            finally:
+                store.close()
+            hits = rank_events(records, query, limit=self._config.recall.max_hits)
+            return {
+                "ok": True, "query": query,
+                "hits": [{"text": h.text, "ts": h.ts, "score": h.score} for h in hits],
+            }
+        except Exception as exc:
+            return {"ok": False, "reason": f"recall failed: {exc}"}
+
+    def _handle_scratch(self, request: Request) -> dict[str, object]:
+        """IPC: list or clear ambient-scratch notes (ADR-v2-005)."""
+        action = str(request.params.get("action", "list"))
+        try:
+            pad = self._scratch_pad()
+            if action == "clear":
+                return {"ok": True, "cleared": pad.clear()}
+            notes = pad.list()
+            return {"ok": True, "notes": [{"text": n.text, "ts": n.ts} for n in notes]}
+        except Exception as exc:
+            return {"ok": False, "reason": f"scratch failed: {exc}"}
 
     def _handle_readback_speak(self, request: Request) -> dict[str, object]:
         """IPC: speak arbitrary text via the TTS backend (`yazses say "..."`)."""

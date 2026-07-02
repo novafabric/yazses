@@ -975,6 +975,78 @@ def mark_wrong(
 
 
 @app.command(
+    rich_help_panel=_LEARNING,
+    epilog=_examples(
+        "yazses recall kubernetes deploy   search past dictations for those words",
+        "yazses recall                     show your most recent dictations",
+    ),
+)
+def recall(
+    query: Optional[list[str]] = typer.Argument(
+        None, help="Words to search your past dictations for (omit for most recent)."
+    ),
+) -> None:
+    """Search your past dictations (Spoken Recall).
+
+    Requires `[learning] enabled = true` and `[recall] enabled = true`. Reads the
+    local encrypted corpus only — nothing leaves the machine.
+    """
+    q = " ".join(query or [])
+    platform = get_platform()
+    client = platform.ipc_client_factory(platform.paths.ipc_socket)
+    try:
+        result = client.call("recall", query=q)
+    except IpcUnreachableError:
+        typer.echo("Daemon is not running. Start it with: yazses start", err=True)
+        raise typer.Exit(1)
+    if not result.get("ok"):
+        typer.echo(f"Recall unavailable: {result.get('reason')}", err=True)
+        raise typer.Exit(1)
+    hits = result.get("hits", [])
+    if not hits:
+        typer.echo("No matching dictations.")
+        return
+    for h in hits:
+        typer.echo(f"  • {h['text']}")
+
+
+@app.command(
+    rich_help_panel=_LEARNING,
+    epilog=_examples(
+        "yazses scratch          list your ambient note-to-self notes",
+        "yazses scratch clear    delete all scratch notes",
+    ),
+)
+def scratch(
+    action: str = typer.Argument("list", help="list | clear"),
+) -> None:
+    """Show or clear your ambient scratch notes (spoken "note to self …").
+
+    Notes are captured in command mode when `[recall] scratch = true` and stored in
+    a plain local file.
+    """
+    platform = get_platform()
+    client = platform.ipc_client_factory(platform.paths.ipc_socket)
+    try:
+        result = client.call("scratch", action=action)
+    except IpcUnreachableError:
+        typer.echo("Daemon is not running. Start it with: yazses start", err=True)
+        raise typer.Exit(1)
+    if not result.get("ok"):
+        typer.echo(f"Scratch unavailable: {result.get('reason')}", err=True)
+        raise typer.Exit(1)
+    if action == "clear":
+        typer.echo(f"Cleared {result.get('cleared', 0)} note(s).")
+        return
+    notes = result.get("notes", [])
+    if not notes:
+        typer.echo("No scratch notes yet. Say \"note to self …\" in command mode.")
+        return
+    for n in notes:
+        typer.echo(f"  • {n['text']}")
+
+
+@app.command(
     name="punch-in",
     rich_help_panel=_DICTATION,
     epilog=_examples(
