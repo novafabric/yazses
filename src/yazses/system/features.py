@@ -89,6 +89,7 @@ def _registry() -> list[_Def]:
     se_on, se_off = _bool("commands", "spoken_edit")
     re_on, re_off = _bool("recall")
     ag_on, ag_off = _bool("agent")
+    pi_on, pi_off = _bool("pilot")
 
     return [
         _Def("dictation", "Dictation core", "always on", CORE,
@@ -166,6 +167,10 @@ def _registry() -> list[_Def]:
              "Speak an intent to run allowlisted tools via MCP; state-changing tools "
              "ask first. Needs the 'agent' extra + a local planner model. Off by default.",
              lambda c: c.agent.enabled, ag_on, ag_off),
+        _Def("pilot", "Voice Pilot (AT-SPI)", "[pilot] — click by voice", OPTIONAL,
+             "Drive the desktop by voice via the accessibility tree ('click Save', "
+             "'focus the terminal'). Linux + pyatspi; labels only, no screenshots. Off by default.",
+             lambda c: c.pilot.enabled, pi_on, pi_off),
         _Def("cocktail", "Cocktail Filter (voice focus)", "[cocktail] — experimental", EXPERIMENTAL,
              "Tries to focus on your voice and reject other speakers. Currently "
              "over-rejects your OWN voice — leave off until improved.",

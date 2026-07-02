@@ -117,6 +117,10 @@ voiceprint = [
 agent = [
     "mcp>=1.9",
 ]
+# v2.0.0 Wave B — AT-SPI Voice Pilot (ADR-v2-007). Linux only. pyatspi ships via
+# system packages (e.g. `apt install python3-pyatspi gir1.2-atspi-2.0`), NOT pip,
+# so it is intentionally NOT declared here; the backend imports it lazily when
+# [pilot] enabled → absent means Voice Pilot stays dormant.
 # v2 cognitive layer — Glance-Type look-to-pane (webcam gaze).
 # NOTE: l2cs pins an older torch that conflicts with a unified resolution, so it
 # is intentionally NOT declared here — install manually when enabling gaze:

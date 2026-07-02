@@ -461,6 +461,20 @@ class AgentConfig:
 
 
 @dataclass
+class PilotConfig:
+    """v2.0.0 Wave B — AT-SPI Voice Pilot (ADR-v2-007).
+
+    Voice-drive the desktop via the accessibility tree ("click Save", "focus the
+    terminal"). Linux-first via pyatspi (opt-in, system packages); reads element
+    labels/roles only — never a screenshot. OFF by default.
+    """
+    enabled: bool = False
+    backend: str = "atspi"            # atspi | none
+    match_threshold: float = 0.5      # min label-match similarity to act
+    confirm_ambiguous: bool = True    # ask when several elements tie
+
+
+@dataclass
 class Config:
     stt: SttConfig = field(default_factory=SttConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -491,6 +505,7 @@ class Config:
     context: ContextConfig = field(default_factory=ContextConfig)
     recall: RecallConfig = field(default_factory=RecallConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    pilot: PilotConfig = field(default_factory=PilotConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -546,6 +561,7 @@ def load_config(path: Path | None = None) -> Config:
         context=ContextConfig(**data.get("context", {})),
         recall=RecallConfig(**data.get("recall", {})),
         agent=AgentConfig(**data.get("agent", {})),
+        pilot=PilotConfig(**data.get("pilot", {})),
     )
     return _apply_presets(cfg)
 
