@@ -552,11 +552,15 @@ class Daemon:
             # path so non-prosody users never pay the word_timestamps cost.
             prosody_words: list[Word] = []
             want_prosody = self._config.prosody.enabled and not use_streaming
+            # Confidence Ink (ADR-v2-001) also needs the word-timestamps path for
+            # per-word probabilities; share the same decode as prosody.
+            want_confidence = self._config.confidence.enabled and not use_streaming
+            want_words = want_prosody or want_confidence
             t_decode = time.monotonic()
             if use_streaming:
                 assert self._stream_engine is not None
                 text = self._stream_engine.commit()
-            elif want_prosody:
+            elif want_words:
                 text, prosody_words = self._engine.transcribe_words(
                     decode_audio,
                     self._config.audio.sample_rate,
@@ -577,6 +581,26 @@ class Daemon:
                 audio_secs, decode_ms, self._config.stt.model,
                 float(np.abs(padded).mean()) if padded.size else 0.0,
             )
+
+            # Confidence Ink (ADR-v2-001): flag words the recognizer was unsure
+            # about, using its own token probabilities. Metadata only here (a COUNT,
+            # never the words) to honor ADR-011; the overlay marker + voice re-pick
+            # UX consume `low_confidence_spans` from `event` downstream. Guarded so
+            # it can never break dictation.
+            if want_confidence and prosody_words:
+                try:
+                    from yazses.postprocess.confidence import low_confidence_spans
+                    pairs = [(w.text, w.probability) for w in prosody_words]
+                    spans = low_confidence_spans(pairs, self._config.confidence.threshold)
+                    n_low = sum(e - s for s, e in spans)
+                    event["low_confidence_words"] = n_low
+                    if n_low:
+                        log.info(
+                            "Confidence Ink: %d low-confidence word(s) (threshold %.2f).",
+                            n_low, self._config.confidence.threshold,
+                        )
+                except Exception:
+                    pass  # confidence annotation is best-effort; never break dictation
 
             text = clean_text(text)
             event["cleaned_text"] = text
