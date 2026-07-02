@@ -61,3 +61,16 @@ def test_repick_single_or_empty_returns_none():
 def test_repick_dedupes_before_cycling():
     # duplicates in the beam must not create a no-op "switch to the same word"
     assert repick(["their", "their", "there"], "their") == "there"
+
+
+def test_word_backward_compatible_default_probability():
+    from yazses.postprocess.prosody import Word
+    # existing 3-arg construction still valid; probability defaults to 0.0
+    assert Word("a", 0.0, 0.1).probability == 0.0
+
+
+def test_word_probability_feeds_confidence():
+    from yazses.postprocess.prosody import Word
+    words = [Word("hello", 0.0, 0.5, 0.9), Word("wrold", 0.5, 0.9, 0.3)]
+    pairs = [(w.text, w.probability) for w in words]
+    assert low_confidence_spans(pairs, 0.5) == [(1, 2)]

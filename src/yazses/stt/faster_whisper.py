@@ -58,5 +58,10 @@ class FasterWhisperEngine:
         for seg in segments:
             texts.append(seg.text.strip())
             for w in getattr(seg, "words", None) or []:
-                words.append(Word(text=w.word.strip(), start=float(w.start), end=float(w.end)))
+                words.append(Word(
+                    text=w.word.strip(),
+                    start=float(w.start),
+                    end=float(w.end),
+                    probability=float(getattr(w, "probability", 0.0) or 0.0),
+                ))
         return " ".join(texts).strip(), words

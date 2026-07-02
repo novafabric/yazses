@@ -41,10 +41,16 @@ class ProsodyMark:
 
 @dataclass(frozen=True)
 class Word:
-    """A transcript word with faster-whisper timestamps (seconds)."""
+    """A transcript word with faster-whisper timestamps (seconds).
+
+    ``probability`` is faster-whisper's per-word confidence (0..1), used by
+    Confidence Ink (ADR-v2-001); defaults to 0.0 so existing 3-arg construction
+    stays valid.
+    """
     text: str
     start: float
     end: float
+    probability: float = 0.0
 
 
 @dataclass(frozen=True)
