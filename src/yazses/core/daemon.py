@@ -302,6 +302,22 @@ class Daemon:
         # Opt-in self-improvement corpus (ADR-012). Dormant unless enabled.
         self._corpus = build_writer(self._platform.paths.data_dir, cfg.learning)
 
+        # True Code-Switch routing (ADR-v2-008). Dormant unless [polyglot] is
+        # fully configured with an out-of-band adapter; surface a hint otherwise.
+        try:
+            from yazses.polyglot.router import PolyglotRouter
+            self._polyglot = PolyglotRouter.from_config(cfg.polyglot)
+            if self._polyglot.active:
+                log.info("Polyglot code-switch routing active (pair %s-%s).",
+                         *self._polyglot.pair)
+            else:
+                reason = self._polyglot.status_reason()
+                if reason:
+                    log.warning("Polyglot enabled but dormant: %s.", reason)
+        except Exception:
+            self._polyglot = None
+            log.debug("Polyglot router init failed; skipping", exc_info=True)
+
         # Opt-in post-dictation edit capture (signal b). Reads the editor line
         # back after a dictation; never logs keystrokes. Disabled unless a
         # reachable editor socket is configured.
