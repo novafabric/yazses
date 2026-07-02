@@ -56,22 +56,38 @@ class ProsodyResult:
     latency_ms: float
 
 
+_SENTENCE_ENDERS = ".!?…,;:"
+
+
+def _end_sentence(prev: str) -> str:
+    """Append a period to the previous rendered token unless it is already
+    punctuated (ignoring trailing markdown ``*`` and whitespace)."""
+    stripped = prev.rstrip().rstrip("*")
+    if not stripped or stripped[-1] in _SENTENCE_ENDERS:
+        return prev
+    return prev + "."
+
+
 def format_prosody(
     words: list[str],
     marks: list[ProsodyMark],
     *,
     paragraph_pause_s: float = 0.6,
+    sentence_pause_s: float = 0.0,
     style: str = "markdown",
 ) -> str:
     """Render words with prosody-driven formatting.
 
     ``style="markdown"`` bolds emphasized words (``**word**``) and turns a pause
-    >= ``paragraph_pause_s`` into a paragraph break. ``style="none"`` returns the
-    plain space-joined text (extraction effectively off).
+    >= ``paragraph_pause_s`` into a paragraph break. When ``sentence_pause_s > 0``
+    (ADR-v2-002), a gap at/above it but below the paragraph threshold ends the
+    previous word with a period (and paragraph breaks also close the sentence).
+    ``style="none"`` returns the plain space-joined text (extraction effectively off).
     """
     if style == "none" or not words:
         return " ".join(words)
 
+    add_periods = sentence_pause_s > 0
     out: list[str] = []
     for i, word in enumerate(words):
         mark = marks[i] if i < len(marks) else ProsodyMark()
@@ -79,7 +95,12 @@ def format_prosody(
         if i == 0:
             out.append(token)
         elif mark.pause_before_s >= paragraph_pause_s:
+            if add_periods and out:
+                out[-1] = _end_sentence(out[-1])
             out.append("\n\n" + token)
+        elif add_periods and mark.pause_before_s >= sentence_pause_s:
+            out[-1] = _end_sentence(out[-1])
+            out.append(" " + token)
         else:
             out.append(" " + token)
     return "".join(out)
@@ -176,7 +197,10 @@ def annotate(
     # whitespace) is emitted even for format="none"; emphasis is governed purely
     # by the marks (False unless ``want_emphasis``), so "none" yields breaks only.
     rendered = format_prosody(
-        tokens, marks, paragraph_pause_s=pause_threshold_s, style="markdown"
+        tokens, marks,
+        paragraph_pause_s=pause_threshold_s,
+        sentence_pause_s=config.pause_sentence_ms / 1000.0,
+        style="markdown",
     )
     breaks = rendered.count("\n\n")
     emphasized = sum(1 for m in marks if m.emphasized)
