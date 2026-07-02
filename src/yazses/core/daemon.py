@@ -812,6 +812,31 @@ class Daemon:
                 words, [], existing_prompt=base,
                 max_terms=self._config.personalize.max_prompt_terms,
             ) or base
+        # v2.0.0 Context-Primed Dictation (ADR-v2-004): transiently fold salient
+        # terms from the active window/selection/clipboard into the prompt so
+        # domain words are transcribed right. OFF by default; readers are
+        # best-effort (bounded timeout, never raise) and nothing is stored. The
+        # whole block is guarded so context priming can never break dictation.
+        ctx = self._config.context
+        if ctx.enabled:
+            try:
+                from yazses.commands.context import compose_context_prompt
+                from yazses.system.context_read import read_sources
+                sources = read_sources(
+                    ctx.use_window_title, ctx.use_selection, ctx.use_clipboard
+                )
+                extra = compose_context_prompt(
+                    sources,
+                    max_terms=ctx.max_terms,
+                    use_window_title=ctx.use_window_title,
+                    use_selection=ctx.use_selection,
+                    use_clipboard=ctx.use_clipboard,
+                    use_lsp=False,
+                )
+                if extra:
+                    base = f"{base}. {extra}" if base else extra
+            except Exception:
+                pass  # context priming is best-effort; never break dictation
         # Always prime the coined app name so Whisper spells "YazSes".
         return merge_initial_prompt(base)
 
