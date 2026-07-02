@@ -31,6 +31,51 @@ def mine_terms(texts, top_k: int = 64, min_count: int = 2) -> list[str]:
     return [w for w, c in counts.most_common() if c >= min_count][:top_k]
 
 
+def mine_ngrams(texts, n: int = 2, top_k: int = 32, min_count: int = 2) -> list[str]:
+    """Return up to ``top_k`` frequent ``n``-word content phrases (Personal Adapter P1).
+
+    Only phrases whose every token is a content word (length > 2, not a stopword)
+    are counted, so clean multi-word jargon survives ("faster whisper", "voice
+    print mind") while function-word runs ("of the", "in the") are dropped. Phrases
+    are lowercased and ordered most-frequent first. ``n < 2`` returns ``[]`` (use
+    :func:`mine_terms` for unigrams).
+    """
+    if n < 2:
+        return []
+    counts: Counter[str] = Counter()
+    for text in texts:
+        toks = [raw.strip(".,!?;:\"'()[]{}").lower() for raw in (text or "").split()]
+        toks = [t for t in toks if t]
+        for i in range(len(toks) - n + 1):
+            gram = toks[i : i + n]
+            if all(len(t) > 2 and t not in _STOPWORDS for t in gram):
+                counts[" ".join(gram)] += 1
+    return [g for g, c in counts.most_common() if c >= min_count][:top_k]
+
+
+def mine_personal(texts, *, max_terms: int = 64, min_count: int = 2) -> list[str]:
+    """Combined personal biasing terms: multi-word phrases first, then unigrams.
+
+    Phrases are placed ahead of single words so Whisper biases toward the more
+    specific jargon; the two lists are de-duplicated (a unigram already covered by
+    a phrase is still allowed since it biases independently) and capped at
+    ``max_terms``. Pure — no model, no training, no I/O. (ADR-v2-009 P1)
+    """
+    texts = list(texts)
+    bigrams = mine_ngrams(texts, n=2, top_k=max_terms, min_count=min_count)
+    trigrams = mine_ngrams(texts, n=3, top_k=max_terms // 2, min_count=min_count)
+    unigrams = mine_terms(texts, top_k=max_terms, min_count=min_count)
+    out: list[str] = []
+    seen: set[str] = set()
+    for term in trigrams + bigrams + unigrams:
+        if term not in seen:
+            seen.add(term)
+            out.append(term)
+        if len(out) >= max_terms:
+            break
+    return out
+
+
 def build_prompt(
     vocabulary,
     mined,

@@ -131,6 +131,9 @@ class Daemon:
         self._last_dictation_monotonic: float | None = None
         self._streaming_active: bool = False
         self._corpus: CorpusWriter | None = None
+        # Personal Adapter P1 (ADR-v2-009): corpus-mined biasing terms, computed
+        # once and cached (None = not yet computed). Off unless [personalize].
+        self._personal_bias: list[str] | None = None
         self._edit_watcher = None
         self._cleaner: LlmCleaner | None = None
         # Read-Back Loop TTS backend (None when [tts] disabled — dormant).
@@ -821,6 +824,40 @@ class Daemon:
                 log.debug("Endpoint pre-warm failed: %s", exc)
         return fired
 
+    def _personal_bias_terms(self) -> list[str]:
+        """Corpus-mined biasing terms (Personal Adapter P1, ADR-v2-009).
+
+        Computed once and cached: reads recent corpus transcripts and mines
+        frequent personal phrases/words into Whisper biasing terms. Empty unless
+        ``[personalize] enabled`` + ``bias_from_corpus`` AND the encrypted learning
+        corpus (ADR-012) exists with content. Fully guarded and bounded (last 500
+        events) — never breaks or slows dictation beyond the one-time mine.
+        """
+        if self._personal_bias is not None:
+            return self._personal_bias
+        self._personal_bias = []  # cache "computed" even if we bail/error
+        pc = self._config.personalize
+        if not (pc.enabled and pc.bias_from_corpus and self._config.learning.enabled):
+            return self._personal_bias
+        try:
+            from yazses.learning.capture import open_store
+            from yazses.personalize.prompt_builder import mine_personal
+            store = open_store(self._platform.paths.data_dir)
+            try:
+                texts = [e.final_text for e in store.events() if e.final_text]
+            finally:
+                store.close()
+            self._personal_bias = mine_personal(
+                texts[-500:], max_terms=pc.max_prompt_terms
+            )
+            if self._personal_bias:
+                log.info("Personal Adapter: mined %d biasing term(s) from corpus.",
+                         len(self._personal_bias))
+        except Exception:
+            log.debug("Personal Adapter corpus mining failed; skipping", exc_info=True)
+            self._personal_bias = []
+        return self._personal_bias
+
     def _effective_initial_prompt(self) -> str | None:
         """The STT ``initial_prompt``, biased toward the user (Voiceprint Mind P1).
 
@@ -839,9 +876,10 @@ class Daemon:
         words = load_vocab(vocab_path(self._platform.paths.config_file.parent))
         raw = os.environ.get("YAZSES_VOCABULARY", "")
         words += [t.strip() for t in raw.split(",") if t.strip()]
-        if words:
+        mined = self._personal_bias_terms()
+        if words or mined:
             base = build_prompt(
-                words, [], existing_prompt=base,
+                words, mined, existing_prompt=base,
                 max_terms=self._config.personalize.max_prompt_terms,
             ) or base
         # v2.0.0 Context-Primed Dictation (ADR-v2-004): transiently fold salient
