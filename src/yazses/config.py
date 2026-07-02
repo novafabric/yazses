@@ -475,6 +475,21 @@ class PilotConfig:
 
 
 @dataclass
+class ModalityConfig:
+    """v2.0.0 Wave C — sEMG Command Layer & Modality Role Router (ADR-v2-011).
+
+    Assign each input modality its fastest role (voice→dictation, EMG→command,
+    gaze→targeting, keyboard→activate) via a preset + priority order. EXPERIMENTAL,
+    off by default; the router is pure policy — hardware intakes stay opt-in.
+    """
+    enabled: bool = False
+    preset: str = "balanced"          # balanced | hands-free | voice-only
+    priority: list[str] = field(
+        default_factory=lambda: ["voice", "emg", "gaze", "keyboard"]
+    )
+
+
+@dataclass
 class Config:
     stt: SttConfig = field(default_factory=SttConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -506,6 +521,7 @@ class Config:
     recall: RecallConfig = field(default_factory=RecallConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     pilot: PilotConfig = field(default_factory=PilotConfig)
+    modality: ModalityConfig = field(default_factory=ModalityConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -562,6 +578,7 @@ def load_config(path: Path | None = None) -> Config:
         recall=RecallConfig(**data.get("recall", {})),
         agent=AgentConfig(**data.get("agent", {})),
         pilot=PilotConfig(**data.get("pilot", {})),
+        modality=ModalityConfig(**data.get("modality", {})),
     )
     return _apply_presets(cfg)
 

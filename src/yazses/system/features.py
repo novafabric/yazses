@@ -90,6 +90,7 @@ def _registry() -> list[_Def]:
     re_on, re_off = _bool("recall")
     ag_on, ag_off = _bool("agent")
     pi_on, pi_off = _bool("pilot")
+    md_on, md_off = _bool("modality")
 
     return [
         _Def("dictation", "Dictation core", "always on", CORE,
@@ -175,6 +176,10 @@ def _registry() -> list[_Def]:
              "Tries to focus on your voice and reject other speakers. Currently "
              "over-rejects your OWN voice — leave off until improved.",
              lambda c: c.cocktail.enabled, co_on, co_off),
+        _Def("modality", "Modality Role Router", "[modality] — multi-input, experimental", EXPERIMENTAL,
+             "Routes each input to its fastest role (gaze→point, EMG→command, "
+             "voice→dictation). Needs EMG/gaze hardware; experimental. Off by default.",
+             lambda c: c.modality.enabled, md_on, md_off),
         _Def("gaze", "Glance-Type (camera)", "[gaze] — look-to-pane, experimental", EXPERIMENTAL,
              "Uses the webcam to route dictation to the pane you look at. "
              "Experimental; heavy deps.",
