@@ -84,6 +84,9 @@ def _registry() -> list[_Def]:
     llm_on, llm_off = _bool("filters.disfluency", "llm_enabled")
     dys_on, dys_off = _bool("accessibility", "dysfluency_friendly")
     vp_on, vp_off = _bool("commands", "voice_punctuation")
+    conf_on, conf_off = _bool("confidence")
+    ctx_on, ctx_off = _bool("context")
+    se_on, se_off = _bool("commands", "spoken_edit")
 
     return [
         _Def("dictation", "Dictation core", "always on", CORE,
@@ -141,6 +144,18 @@ def _registry() -> list[_Def]:
         _Def("llm-cleanup", "LLM cleanup", "[filters.disfluency]", OPTIONAL,
              "Reformats dictation with a small offline LLM. Needs a model file.",
              lambda c: c.filters.disfluency.llm_enabled, llm_on, llm_off),
+        _Def("confidence", "Confidence Ink", "[confidence] — mark unsure words", OPTIONAL,
+             "Marks words Whisper was unsure about so you can re-pick them by voice "
+             "instead of re-dictating. Uses Whisper's own confidence; local only.",
+             lambda c: c.confidence.enabled, conf_on, conf_off),
+        _Def("spoken-edit", "Spoken Edit Mode", "[commands] spoken_edit", OPTIONAL,
+             "Edit the last dictation by voice ('change their to there', 'delete the "
+             "last sentence'). Command-key gated. Off by default.",
+             lambda c: c.commands.spoken_edit, se_on, se_off),
+        _Def("context", "Context-Primed Dictation", "[context] — window/selection terms", OPTIONAL,
+             "Primes STT with terms from the active window/selection so domain words "
+             "are transcribed right. Read transiently, never stored. Off by default.",
+             lambda c: c.context.enabled, ctx_on, ctx_off),
         _Def("cocktail", "Cocktail Filter (voice focus)", "[cocktail] — experimental", EXPERIMENTAL,
              "Tries to focus on your voice and reject other speakers. Currently "
              "over-rejects your OWN voice — leave off until improved.",
