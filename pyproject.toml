@@ -112,6 +112,11 @@ tts = [
 voiceprint = [
     "speechbrain>=1.1",
 ]
+# v2.0.0 Wave B — Voice-to-Tool / offline Spoken MCP (ADR-v2-006). Heavy; opt-in.
+# The MCP client is imported lazily only when [agent] enabled; absent → dormant.
+agent = [
+    "mcp>=1.9",
+]
 # v2 cognitive layer — Glance-Type look-to-pane (webcam gaze).
 # NOTE: l2cs pins an older torch that conflicts with a unified resolution, so it
 # is intentionally NOT declared here — install manually when enabling gaze:

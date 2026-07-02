@@ -446,6 +446,21 @@ class RecallConfig:
 
 
 @dataclass
+class AgentConfig:
+    """v2.0.0 Wave B — Voice-to-Tool / offline Spoken MCP (ADR-v2-006).
+
+    Speak an intent → a local SLM emits a GBNF-constrained tool call executed via
+    MCP against an ``allowlist``, confirming state-mutating tools. OFF by default;
+    the SLM + MCP client are heavy and opt-in behind the ``agent`` extra, lazy-
+    imported only when enabled.
+    """
+    enabled: bool = False
+    allowlist: list[str] = field(default_factory=list)   # tool names allowed to run
+    confirm: str = "writes"           # all | writes | none — confirm before running
+    slm_model_path: str = ""          # local planner SLM; empty = disabled
+
+
+@dataclass
 class Config:
     stt: SttConfig = field(default_factory=SttConfig)
     hotkey: HotkeyConfig = field(default_factory=HotkeyConfig)
@@ -475,6 +490,7 @@ class Config:
     confidence: ConfidenceConfig = field(default_factory=ConfidenceConfig)
     context: ContextConfig = field(default_factory=ContextConfig)
     recall: RecallConfig = field(default_factory=RecallConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
 
 
 def _load_filters(data: dict) -> FiltersConfig:
@@ -529,6 +545,7 @@ def load_config(path: Path | None = None) -> Config:
         confidence=ConfidenceConfig(**data.get("confidence", {})),
         context=ContextConfig(**data.get("context", {})),
         recall=RecallConfig(**data.get("recall", {})),
+        agent=AgentConfig(**data.get("agent", {})),
     )
     return _apply_presets(cfg)
 
